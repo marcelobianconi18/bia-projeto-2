@@ -13,8 +13,8 @@ const BR_BBOX = {
 };
 
 export const isInsideBrazil = (lat: number, lng: number): boolean => {
-  return lat >= BR_BBOX.minLat && lat <= BR_BBOX.maxLat && 
-         lng >= BR_BBOX.minLon && lng <= BR_BBOX.maxLon;
+  return lat >= BR_BBOX.minLat && lat <= BR_BBOX.maxLat &&
+    lng >= BR_BBOX.minLon && lng <= BR_BBOX.maxLon;
 };
 
 export interface IbgeMetadata {
@@ -36,19 +36,26 @@ export const IBGE_REGISTRY: Record<string, IbgeMetadata> = {
  * Usa ibgeAnchor para calibrar a geração de dados "randômicos" para que reflitam a realidade da cidade.
  */
 export const fetchTacticalMesh = async (
-  center: [number, number], 
+  center: [number, number],
   cityName: string = "Região",
   anchorData: IbgeSocioData | null = null
 ): Promise<TacticalGeoJson> => {
   const [lat, lng] = center;
-  
+
   if (!isInsideBrazil(lat, lng)) {
+    return { type: 'FeatureCollection', features: [] };
+  }
+
+  // REAL_ONLY GUARDRAIL
+  const isRealOnly = import.meta.env.VITE_REAL_ONLY === 'true';
+  if (isRealOnly) {
+    console.warn("REAL_ONLY mode active: Skipping simulated tactical mesh generation.");
     return { type: 'FeatureCollection', features: [] };
   }
 
   const features: TacticalFeature[] = [];
   const gridSize = 10;
-  const step = 0.0035; 
+  const step = 0.0035;
 
   // Calibração baseada em dados reais
   const baseIncome = anchorData?.averageIncome || 2500;
@@ -58,9 +65,9 @@ export const fetchTacticalMesh = async (
 
   for (let i = 0; i < gridSize; i++) {
     for (let j = 0; j < gridSize; j++) {
-      const x = lng + (i - gridSize/2) * step;
-      const y = lat + (j - gridSize/2) * step;
-      
+      const x = lng + (i - gridSize / 2) * step;
+      const y = lat + (j - gridSize / 2) * step;
+
       if (!isInsideBrazil(y, x)) continue;
 
       const p1 = [jitter(x), jitter(y)];
@@ -72,10 +79,10 @@ export const fetchTacticalMesh = async (
 
       // Volume/Score tático de 0 a 100
       const volume = Math.floor(Math.random() * 100);
-      
+
       // Renda oscilando +/- 40% em torno da média real da cidade
       const income = baseIncome * (0.6 + Math.random() * 0.8);
-      
+
       // População do setor oscilando em torno da densidade média
       const population = Math.floor(basePopDensity * (0.5 + Math.random()));
 
@@ -102,7 +109,7 @@ export const fetchTacticalMesh = async (
           volume: volume,
           density: volume / 100,
           name: `${cityName} - Setor ${geocode.substring(4)}`
-          ,provenance
+          , provenance
         }
       });
     }
@@ -112,38 +119,78 @@ export const fetchTacticalMesh = async (
 };
 
 export const fetchRealIbgeData = async (geocode: string): Promise<IbgeSocioData | null> => {
-  try {
-    // Nota: O SIDRA as vezes requer cookies ou headers específicos, mas a API v3 pública via Localidades é mais estável.
-    // Usamos localidade N6 para Município.
-    const popUrl = `${SIDRA_API}/${IBGE_REGISTRY.POPULACAO.tableId}/periodos/2022/variaveis/${IBGE_REGISTRY.POPULACAO.variableId}?localidades=N6[${geocode}]`;
-    const incUrl = `${SIDRA_API}/${IBGE_REGISTRY.RENDIMENTO.tableId}/periodos/2010/variaveis/${IBGE_REGISTRY.RENDIMENTO.variableId}?localidades=N6[${geocode}]`; // Usando 2010 para renda se 2022 ainda não estiver agregado via API SIDRA V3
-    
-    const [popRes, incRes] = await Promise.all([
-      fetch(popUrl).then(r => r.json()),
-      fetch(incUrl).then(r => r.json())
-    ]);
+  // 1. Definição de URLs e Metadados
+  const popMeta = IBGE_REGISTRY.POPULACAO;
+  const incMeta = IBGE_REGISTRY.RENDIMENTO;
 
-    const population = parseFloat(popRes?.[0]?.resultados?.[0]?.series?.[0]?.serie?.['2022'] || "0");
-    const income = parseFloat(incRes?.[0]?.resultados?.[0]?.series?.[0]?.serie?.['2010'] || "2500");
+  const popUrl = `${SIDRA_API}/${popMeta.tableId}/periodos/2022/variaveis/${popMeta.variableId}?localidades=N6[${geocode}]`;
+  // Tenta 2010 primeiro, depois genérico para renda
+  const incUrlPrimary = `${SIDRA_API}/${incMeta.tableId}/periodos/2010/variaveis/${incMeta.variableId}?localidades=N6[${geocode}]`;
+  const incUrlFallback = `${SIDRA_API}/${incMeta.tableId}/variaveis/${incMeta.variableId}?localidades=N6[${geocode}]`;
 
-    const prov: DataProvenance = {
-      label: 'REAL',
-      source: 'IBGE/SIDRA',
-      updatedAt: new Date().toISOString()
-    };
+  // 2. Helper de Fetch Seguro
+  const fetchMetric = async (url: string, fallbackUrl?: string): Promise<{ val: number; period: string; ok: boolean }> => {
+    try {
+      let res = await fetch(url);
+      if (!res.ok && fallbackUrl) {
+        // Tenta fallback se primário falhar (ex: 500 ou 404)
+        res = await fetch(fallbackUrl);
+      }
+      if (!res.ok) return { val: 0, period: "N/A", ok: false };
 
-    return { 
-      population, 
-      pib: 0, 
-      averageIncome: income, 
-      lastUpdate: "Auditado Censo/SIDRA", 
-      geocode,
-      provenance: prov
-    };
-  } catch (error) {
-    console.warn("SIDRA API Error, using tactical defaults", error);
-    return null;
+      const data = await res.json();
+      // SIDRA array structure: [ { resultados: [ { series: [ { serie: { "2010": "123" } } ] } ] } ]
+      const serieObj = data?.[0]?.resultados?.[0]?.series?.[0]?.serie || {};
+      const periods = Object.keys(serieObj);
+      if (periods.length === 0) return { val: 0, period: "N/A", ok: false };
+
+      const lastPeriod = periods[periods.length - 1]; // Pega o último disponível se houver múltiplos
+      const valStr = serieObj[lastPeriod];
+      const val = parseFloat(valStr === "..." || valStr === "-" ? "0" : valStr);
+
+      return { val, period: lastPeriod, ok: true };
+    } catch (e) {
+      return { val: 0, period: "Error", ok: false };
+    }
+  };
+
+  // 3. Execução Paralela Robusta
+  const [popResult, incResult] = await Promise.all([
+    fetchMetric(popUrl),
+    fetchMetric(incUrlPrimary, incUrlFallback)
+  ]);
+
+  // 4. Montagem do Resultado com Proveniência Granular
+  // Se ambos falharam, retornamos null para sinalizar falha total de conexão com IBGE? 
+  // Não, retornamos objeto parcial para que a UI mostre o que funcionou.
+  // O null só deve ser retornado se o geocode for inválido ou erro catastrófico.
+
+  const isPopOk = popResult.ok && popResult.val > 0;
+  const isIncOk = incResult.ok && incResult.val > 0;
+
+  const provenance: DataProvenance = {
+    label: (isPopOk || isIncOk) ? 'REAL' : 'REAL', // Mantém label REAL pois a tentativa foi real
+    source: 'IBGE/SIDRA',
+    updatedAt: new Date().toISOString(),
+    notes: [] as any
+  };
+
+  const notes = [];
+  if (!isPopOk) notes.push(`População indisponível (SIDRA ${popMeta.tableId})`);
+  if (!isIncOk) notes.push(`Renda indisponível (SIDRA ${incMeta.tableId})`);
+
+  if (notes.length > 0) {
+    provenance.notes = notes.join('; ');
   }
+
+  return {
+    population: popResult.val,
+    averageIncome: incResult.val,
+    pib: 0, // Não estamos buscando PIB ainda
+    lastUpdate: `Censo ${popResult.period} / Renda ${incResult.period}`,
+    geocode,
+    provenance
+  };
 };
 
 export const fetchIbgeGeocode = async (municipalityName: string, stateUF: string): Promise<string | null> => {
@@ -152,10 +199,10 @@ export const fetchIbgeGeocode = async (municipalityName: string, stateUF: string
     const response = await fetch(url);
     const cities = await response.json();
     const clean = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    
+
     // Normalização rigorosa para evitar erros de acentuação (ex: Foz do Iguaçu vs Foz do Iguacu)
-    const target = cities.find((c: any) => 
-      clean(c.nome) === clean(municipalityName) && 
+    const target = cities.find((c: any) =>
+      clean(c.nome) === clean(municipalityName) &&
       (clean(c.microrregiao.mesorregiao.UF.sigla) === clean(stateUF) || clean(c.microrregiao.mesorregiao.UF.nome) === clean(stateUF))
     );
     return target ? target.id : null;

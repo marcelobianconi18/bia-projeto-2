@@ -1,0 +1,6 @@
+=== Verificando IBGE Localidades ===
+URL: https://servicodados.ibge.gov.br/api/v1/localidades/municipios
+Status: 200
+Contagem de municípios: 5571
+Exemplos encontrados: São Paulo, Rio de Janeiro
+PASS: Localidades OK

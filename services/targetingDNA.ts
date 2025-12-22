@@ -170,8 +170,7 @@ export function buildTargetingDNA(briefing: BriefingData): TargetingDNA {
         };
       }
 
-      case "POI_FLOW":
-      case "ANCHORS": {
+      case "POI_FLOW": {
         return {
           name: `Fluxo & Âncoras (${pos.valueProp})`,
           geoStrategy:

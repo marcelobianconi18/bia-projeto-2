@@ -1,0 +1,21 @@
+
+--- Verificando São Paulo (3550308) ---
+[POP] URL: https://servicodados.ibge.gov.br/api/v3/agregados/9514/periodos/2022/variaveis/93?localidades=N6[3550308] | Status: 200
+[POP] Valor 2022: 11451999
+[INC] URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/periodos/2010/variaveis/593?localidades=N6[3550308] | Status: 500
+[INC] Falha endpoint específico. Tentando genérico...
+[INC-FB] URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/variaveis/593?localidades=N6[3550308] | Status: 500
+
+--- Verificando Rio de Janeiro (3304557) ---
+[POP] URL: https://servicodados.ibge.gov.br/api/v3/agregados/9514/periodos/2022/variaveis/93?localidades=N6[3304557] | Status: 200
+[POP] Valor 2022: 6211223
+[INC] URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/periodos/2010/variaveis/593?localidades=N6[3304557] | Status: 500
+[INC] Falha endpoint específico. Tentando genérico...
+[INC-FB] URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/variaveis/593?localidades=N6[3304557] | Status: 500
+
+--- Verificando Teste (PR) (4108304) ---
+[POP] URL: https://servicodados.ibge.gov.br/api/v3/agregados/9514/periodos/2022/variaveis/93?localidades=N6[4108304] | Status: 200
+[POP] Valor 2022: 285415
+[INC] URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/periodos/2010/variaveis/593?localidades=N6[4108304] | Status: 500
+[INC] Falha endpoint específico. Tentando genérico...
+[INC-FB] URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/variaveis/593?localidades=N6[4108304] | Status: 500

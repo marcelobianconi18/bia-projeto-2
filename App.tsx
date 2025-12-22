@@ -5,11 +5,6 @@ import { AppStep, BriefingData, GeminiAnalysis, MapSettings, DashboardView, Rich
 
 // ... (lines 4-165 unchanged)
 
-<div className="flex-1 relative h-full">
-  <ErrorBoundary>
-    {renderDashboardView()}
-  </ErrorBoundary>
-</div>
 import { BriefingWizard } from './components/BriefingWizard';
 // Lazy load heavy components
 const ExplorerPage = React.lazy(() => import('./components/ExplorerPage').then(module => ({ default: module.ExplorerPage })));
@@ -26,6 +21,8 @@ import { Database, ShieldCheck, Globe, AlertTriangle } from 'lucide-react';
 const DEFAULT_CENTER: [number, number] = [-23.5505, -46.6333];
 
 const App: React.FC = () => {
+  const isRealOnly = import.meta.env.VITE_REAL_ONLY === 'true';
+
   const [view, setView] = useState<AppStep>(AppStep.BRIEFING);
   const [dashboardView, setDashboardView] = useState<DashboardView>('COCKPIT');
   const [briefingData, setBriefingData] = useState<BriefingData | null>(null);
@@ -48,6 +45,8 @@ const App: React.FC = () => {
 
   // Hotspots Inteligentes: Baseados na localidade real do briefing
   const hotspots = useMemo(() => {
+    if (isRealOnly) return []; // REAL_ONLY: sem hotspots simulados
+
     if (!briefingData || !briefingData.geography || outOfJurisdiction) return [];
 
     const lat = briefingData.geography.lat || mapCenter[0];
@@ -76,7 +75,7 @@ const App: React.FC = () => {
         type: level === 'city' ? 'Micro-Setor' : level === 'state' ? 'Município-Chave' : 'Região Econômica'
       };
     }).filter(h => h !== null);
-  }, [briefingData, mapCenter, outOfJurisdiction]);
+  }, [briefingData, mapCenter, outOfJurisdiction, isRealOnly]);
 
   const handleBriefingComplete = async (data: BriefingData) => {
     const lat = data.geography?.lat || DEFAULT_CENTER[0];
@@ -116,9 +115,14 @@ const App: React.FC = () => {
       setIsRealDataAvailable(false);
     }
 
-    setLoadingStatus("Sincronizando Inteligência Gemini...");
-    const result = await analyzeBriefing(data);
-    setAnalysis(result);
+    if (isRealOnly) {
+      setLoadingStatus("Modo REAL_ONLY: Ignorando IA...");
+      setAnalysis(null);
+    } else {
+      setLoadingStatus("Sincronizando Inteligência Gemini...");
+      const result = await analyzeBriefing(data);
+      setAnalysis(result);
+    }
 
     setTimeout(() => {
       setView(AppStep.DASHBOARD);
