@@ -1,8 +1,10 @@
-
 import React, { useState, useMemo } from 'react';
 import { MapSettings, BriefingData, GeminiAnalysis } from '../types';
+import { useTheme } from '../src/hooks/useTheme';
 import { Navigation, Download, Copy, Facebook, X, Loader2, Check, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, Activity, Flame } from 'lucide-react';
 import { ExplainabilityCard } from './ExplainabilityCard';
+import { WeeklyHeatmapWidget } from './WeeklyHeatmapWidget'; // New Widget
+import { Timeseries168Widget } from './Timeseries168Widget'; // Phase 3 Widget
 import L from 'leaflet';
 
 interface DashboardUIProps {
@@ -109,59 +111,61 @@ Renda: ${realIbgeData?.income == null ? 'INDISPONÍVEL (IBGE)' : formatIntBR(rea
 
   const scoreBarWidth = typeof metrics.avgScore === 'number' ? Math.max(0, Math.min(100, metrics.avgScore)) : 0;
 
+  const { theme } = useTheme();
+
   return (
     <>
       <div className="absolute top-0 left-0 w-full z-[1000] p-6 flex justify-between items-center pointer-events-none font-mono">
         <div className="flex items-center gap-4 pointer-events-auto">
-          <button onClick={onBack} className="w-10 h-10 flex items-center justify-center rounded bg-black border border-[#39ff14]/30 text-[#39ff14] hover:bg-[#39ff14]/10 transition shadow-lg shadow-[#39ff14]/10 backdrop-blur-md">
+          <button onClick={onBack} className="w-10 h-10 flex items-center justify-center rounded bg-surface2 border border-app text-app hover:bg-surface transition shadow-lg backdrop-blur-md">
             <ChevronLeft size={20} />
           </button>
-          <div className="bg-black/90 px-4 py-2.5 rounded border border-[#39ff14]/50 flex items-center gap-3">
-            <div className="w-2 h-2 bg-[#39ff14] rounded-full animate-pulse shadow-[0_0_10px_#39ff14]"></div>
+          <div className="bg-surface2 px-4 py-2.5 rounded border border-app flex items-center gap-3">
+            <div className="w-2 h-2 bg-ok rounded-full animate-pulse shadow-[0_0_10px_var(--ok)]"></div>
             <div>
-              <h1 className="text-[12px] font-black text-white uppercase tracking-tighter">BIA TACTICAL ENGINE</h1>
-              <p className="text-[9px] text-[#39ff14] font-bold uppercase tracking-widest">
+              <h1 className="text-[12px] font-black text-app uppercase tracking-tighter">BIA TACTICAL ENGINE</h1>
+              <p className="text-[9px] text-muted font-bold uppercase tracking-widest">
                 {briefing.geography.city} // {isRealOnly ? 'REAL_ONLY' : 'SCAN_MODE'}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex gap-2 pointer-events-auto bg-black border border-white/10 p-1.5 rounded backdrop-blur-md">
-          <button onClick={() => onSettingsChange({ ...settings, zoom: 13 })} className={`px-4 py-2 rounded text-[9px] font-black uppercase tracking-widest transition-all ${settings.zoom === 13 ? 'bg-[#39ff14] text-black' : 'text-slate-500'}`}>2D_FLAT</button>
-          <button onClick={() => onSettingsChange({ ...settings, zoom: 16 })} className={`px-4 py-2 rounded text-[9px] font-black uppercase tracking-widest transition-all ${settings.zoom === 16 ? 'bg-[#39ff14] text-black' : 'text-slate-500'}`}>3D_ISO</button>
+        <div className="flex gap-2 pointer-events-auto bg-surface2 border border-app p-1.5 rounded backdrop-blur-md">
+          <button onClick={() => onSettingsChange({ ...settings, zoom: 13 })} className={`px-4 py-2 rounded text-[9px] font-black uppercase tracking-widest transition-all ${settings.zoom === 13 ? 'bg-surface text-app' : 'text-muted2'}`}>2D_FLAT</button>
+          <button onClick={() => onSettingsChange({ ...settings, zoom: 16 })} className={`px-4 py-2 rounded text-[9px] font-black uppercase tracking-widest transition-all ${settings.zoom === 16 ? 'bg-surface text-app' : 'text-muted2'}`}>3D_ISO</button>
         </div>
       </div>
 
       <div className="absolute top-24 left-6 w-72 z-[1000] flex flex-col gap-4 pointer-events-none font-mono">
-        <div className="bg-black/90 rounded border border-[#39ff14]/30 p-5 pointer-events-auto shadow-2xl">
-          <h3 className="text-[10px] font-black text-[#39ff14] uppercase tracking-widest mb-6 flex items-center gap-2">
+        <div className="bg-surface2 rounded border border-app p-5 pointer-events-auto shadow-2xl">
+          <h3 className="text-[10px] font-black text-accent uppercase tracking-widest mb-6 flex items-center gap-2">
             <SlidersHorizontal size={14} /> FILTRAGEM TÁTICA
           </h3>
 
           <div className="space-y-6">
             <div>
               <div className="flex justify-between items-center mb-3">
-                <span className="text-[10px] text-slate-400 uppercase font-bold">Score Mínimo</span>
-                <span className="text-[11px] font-black text-[#39ff14]">{settings.minScore || 0}%</span>
+                <span className="text-[10px] text-muted2 uppercase font-bold">Score Mínimo</span>
+                <span className="text-[11px] font-black text-app">{settings.minScore || 0}%</span>
               </div>
               <input
                 type="range"
                 min="0" max="95" step="5"
                 value={settings.minScore || 0}
                 onChange={(e) => onSettingsChange({ ...settings, minScore: parseInt(e.target.value) })}
-                className="w-full h-1 bg-slate-900 border border-white/10 appearance-none cursor-pointer accent-[#39ff14]"
+                className="w-full h-1 bg-surface border border-app appearance-none cursor-pointer accent-gray-500"
                 disabled={isRealOnly}
               />
               {isRealOnly && (
-                <p className="mt-2 text-[9px] text-slate-500 uppercase font-black">
+                <p className="mt-2 text-[9px] text-muted2 uppercase font-black">
                   REAL_ONLY: score/IA desativados
                 </p>
               )}
             </div>
 
-            <div className="pt-4 border-t border-white/5 space-y-2">
-              <span className="text-[9px] text-slate-500 uppercase font-black block mb-2">Visibilidade</span>
+            <div className="pt-4 border-t border-app space-y-2">
+              <span className="text-[9px] text-muted2 uppercase font-black block mb-2">Visibilidade</span>
               {[
                 { id: 'showIncome', label: 'CAMADA_RENDA' },
                 { id: 'showLogistics', label: 'RAIO_TÁTICO' },
@@ -172,18 +176,18 @@ Renda: ${realIbgeData?.income == null ? 'INDISPONÍVEL (IBGE)' : formatIntBR(rea
                   key={l.id}
                   onClick={() => !isRealOnly && toggleSetting(l.id as any)}
                   className={`w-full flex items-center justify-between p-3 border transition-all ${isRealOnly
-                      ? 'bg-transparent border-white/5 text-slate-700 cursor-not-allowed opacity-50'
-                      : (settings[l.id as keyof MapSettings]
-                        ? 'bg-[#39ff14]/5 border-[#39ff14]/40 text-[#39ff14]'
-                        : 'bg-transparent border-white/5 text-slate-600')
+                    ? 'bg-transparent border-app text-muted2 cursor-not-allowed opacity-50'
+                    : (settings[l.id as keyof MapSettings]
+                      ? 'bg-surface border-app text-app'
+                      : 'bg-transparent border-app text-muted2')
                     }`}
                 >
                   <span className="text-[10px] font-bold">{l.label}</span>
-                  <div className={`w-1.5 h-1.5 ${!isRealOnly && settings[l.id as keyof MapSettings] ? 'bg-[#39ff14] shadow-[0_0_5px_#39ff14]' : 'bg-slate-800'}`} />
+                  <div className={`w-1.5 h-1.5 ${!isRealOnly && settings[l.id as keyof MapSettings] ? 'bg-ok shadow-[0_0_5px_var(--ok)]' : 'bg-surface'}`} />
                 </button>
               ))}
               {isRealOnly && (
-                <p className="mt-2 text-[9px] text-slate-500 uppercase font-black">
+                <p className="mt-2 text-[9px] text-muted2 uppercase font-black">
                   REAL_ONLY: camadas sintéticas/derivadas desativadas
                 </p>
               )}
@@ -191,18 +195,18 @@ Renda: ${realIbgeData?.income == null ? 'INDISPONÍVEL (IBGE)' : formatIntBR(rea
           </div>
         </div>
 
-        <div className="bg-black/90 rounded border border-[#39ff14]/30 p-5 pointer-events-auto shadow-2xl">
-          <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+        <div className="bg-surface2 rounded border border-app p-5 pointer-events-auto shadow-2xl">
+          <h3 className="text-[10px] font-black text-muted2 uppercase tracking-widest mb-4 flex items-center gap-2">
             <Activity size={14} /> MÉTRICAS_BIA
           </h3>
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-slate-900/50 p-3 border border-white/5">
-              <span className="text-[8px] text-slate-500 block uppercase">Pop. Total (IBGE)</span>
-              <span className="text-sm font-black text-[#39ff14]">{metrics.totalPopulation}</span>
+            <div className="bg-surface p-3 border border-app">
+              <span className="text-[8px] text-muted2 block uppercase">Pop. Total (IBGE)</span>
+              <span className="text-sm font-black text-app">{metrics.totalPopulation}</span>
             </div>
-            <div className="bg-slate-900/50 p-3 border border-white/5">
-              <span className="text-[8px] text-slate-500 block uppercase">Score</span>
-              <span className="text-sm font-black text-[#39ff14]">
+            <div className="bg-surface p-3 border border-app">
+              <span className="text-[8px] text-muted2 block uppercase">Score</span>
+              <span className="text-sm font-black text-app">
                 {metrics.avgScore == null ? 'N/A' : `${metrics.avgScore}%`}
               </span>
             </div>
@@ -212,42 +216,58 @@ Renda: ${realIbgeData?.income == null ? 'INDISPONÍVEL (IBGE)' : formatIntBR(rea
 
       {/* Painel direito */}
       <div className="absolute top-24 right-6 w-80 bottom-24 z-[1000] flex flex-col gap-4 pointer-events-none font-mono">
-        <div className="bg-black/90 rounded border border-[#39ff14]/30 p-5 pointer-events-auto shadow-2xl shrink-0">
+        <div className="bg-surface2 rounded border border-app p-5 pointer-events-auto shadow-2xl shrink-0">
           <div className="flex justify-between items-end mb-4 gap-4">
             <div>
-              <h3 className="text-[10px] font-black text-white uppercase tracking-widest mb-1">OPORTUNIDADE_LOC</h3>
-              <div className="mt-2 inline-block bg-black/90 rounded border border-[#39ff14]/30 p-2 pointer-events-auto shadow-2xl">
-                <span className="text-[10px] font-black text-[#39ff14] bg-[#39ff14]/10 px-2 py-0.5 rounded border border-[#39ff14]/20">
+              <h3 className="text-[10px] font-black text-app uppercase tracking-widest mb-1">OPORTUNIDADE_LOC</h3>
+              <div className="mt-2 inline-block bg-surface2 rounded border border-app p-2 pointer-events-auto shadow-2xl">
+                <span className="text-[10px] font-black text-accent bg-surface px-2 py-0.5 rounded border border-app">
                   {isRealOnly ? "REAL_ONLY" : (metrics.avgScore > 75 ? "ALVO_CRITICO" : "TERRITORIO_NEUTRO")}
                 </span>
               </div>
               <div className="mt-2">
-                <span className="text-3xl font-black text-white leading-none">{metrics.reach}</span>
+                <span className="text-3xl font-black text-app leading-none">{metrics.reach}</span>
               </div>
             </div>
           </div>
 
-          <div className="w-full h-1 bg-slate-900 border border-white/5 overflow-hidden">
-            <div className="h-full bg-[#39ff14] shadow-[0_0_10px_#39ff14] transition-all duration-1000" style={{ width: `${scoreBarWidth}%` }} />
+
+          <div className="w-full h-1 bg-surface border border-app overflow-hidden">
+            <div className="h-full bg-ok shadow-[0_0_10px_var(--ok)] transition-all duration-1000" style={{ width: `${scoreBarWidth}%` }} />
           </div>
 
-          <div className="mt-4 bg-slate-950 p-3 border border-[#39ff14]/10">
-            <p className="text-[10px] text-[#39ff14]/80 italic leading-relaxed uppercase">
+          <div className="mt-4 bg-app p-3 border border-app">
+            <p className="text-[10px] text-muted italic leading-relaxed uppercase">
               {'>>'} "{isRealOnly ? 'REAL_ONLY: sem IA' : (analysis?.verdict ?? 'N/A')}"
             </p>
           </div>
         </div>
 
-        <div className="bg-black/90 rounded border border-white/10 pointer-events-auto flex flex-col flex-1 overflow-hidden shadow-2xl">
-          <div className="p-4 border-b border-white/5 bg-slate-900/40 flex items-center justify-between">
-            <h3 className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
-              <Flame size={14} className="text-[#fff01f]" /> ZONAS_QUENTES
+        {/* Weekly Heatmap Widget (Legacy Phase 1.5) */}
+        {briefing.geoSignals?.timeseries && (
+          <div className="pointer-events-auto shrink-0 bg-surface2 rounded border border-app shadow-2xl p-4 min-h-[220px]">
+            <WeeklyHeatmapWidget data={briefing.geoSignals.timeseries} />
+          </div>
+        )}
+
+        {/* Phase 3: Peak Hours Widget */}
+        <div className="pointer-events-auto shrink-0 bg-surface2 rounded border border-app shadow-2xl p-4 min-h-[220px]">
+          <Timeseries168Widget
+            region={{ kind: 'MUNICIPIO', city: briefing.geography.city }}
+            isRealOnly={isRealOnly}
+          />
+        </div>
+
+        <div className="bg-surface2 rounded border border-app pointer-events-auto flex flex-col flex-1 overflow-hidden shadow-2xl">
+          <div className="p-4 border-b border-app bg-surface2 flex items-center justify-between">
+            <h3 className="text-[10px] font-black text-app uppercase tracking-widest flex items-center gap-2">
+              <Flame size={14} className="text-warn" /> ZONAS_QUENTES
             </h3>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2 custom-scrollbar bg-black/20">
+          <div className="flex-1 overflow-y-auto p-2 custom-scrollbar bg-surface/20">
             {isRealOnly ? (
-              <div className="p-3 text-[10px] text-slate-500 uppercase font-black">
+              <div className="p-3 text-[10px] text-muted2 uppercase font-black">
                 REAL_ONLY: hotspots desativados (evita simulação)
               </div>
             ) : (
@@ -255,37 +275,37 @@ Renda: ${realIbgeData?.income == null ? 'INDISPONÍVEL (IBGE)' : formatIntBR(rea
                 <button
                   key={spot.id}
                   onClick={() => handleNavigate(spot.lat, spot.lng)}
-                  className="w-full flex items-center justify-between p-3 rounded hover:bg-[#39ff14]/5 transition group text-left border border-transparent hover:border-[#39ff14]/20 mb-1"
+                  className="w-full flex items-center justify-between p-3 rounded hover:bg-surface transition group text-left border border-transparent hover:border-app mb-1"
                 >
                   <div className="flex items-center gap-3">
-                    <span className={`text-[10px] font-black w-6 h-6 flex items-center justify-center border ${spot.rank <= 3 ? 'border-[#39ff14] text-[#39ff14]' : 'border-slate-800 text-slate-500'}`}>{spot.rank}</span>
+                    <span className={`text-[10px] font-black w-6 h-6 flex items-center justify-center border ${spot.rank <= 3 ? 'border-accent text-accent' : 'border-surface text-muted2'}`}>{spot.rank}</span>
                     <div>
-                      <p className="text-[11px] font-bold text-slate-200 group-hover:text-white uppercase">{spot.name}</p>
-                      <p className="text-[8px] text-slate-600 uppercase font-black tracking-widest">{spot.type}</p>
+                      <p className="text-[11px] font-bold text-muted group-hover:text-app uppercase">{spot.name}</p>
+                      <p className="text-[8px] text-muted2 uppercase font-black tracking-widest">{spot.type}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-black text-[#39ff14]">{spot.score}%</span>
-                    <ChevronRight size={12} className="text-slate-700 group-hover:text-[#39ff14]" />
+                    <span className="text-[11px] font-black text-accent">{spot.score}%</span>
+                    <ChevronRight size={12} className="text-muted2 group-hover:text-accent" />
                   </div>
                 </button>
               ))
             )}
           </div>
 
-          <div className="p-4 bg-black border-t border-white/5 space-y-2">
+          <div className="p-4 bg-app border-t border-app space-y-2">
             <button
               onClick={handleViewAll}
-              className="w-full py-2.5 bg-transparent hover:bg-white/5 border border-white/10 rounded font-black text-slate-400 text-[9px] tracking-widest flex items-center justify-center gap-2 transition-all"
+              className="w-full py-2.5 bg-transparent hover:bg-surface border border-app rounded font-black text-muted2 text-[9px] tracking-widest flex items-center justify-center gap-2 transition-all"
               disabled={isRealOnly}
             >
               <Eye size={14} /> EXIBIR_TODOS
             </button>
             <button
               onClick={() => setShowExport(true)}
-              className="w-full py-3 bg-[#39ff14] text-black rounded font-black text-[10px] tracking-widest flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-lg shadow-[#39ff14]/20"
+              className="w-full py-3 bg-surface border border-app text-app rounded font-black text-[10px] tracking-widest flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-lg"
             >
-              <Navigation size={14} fill="black" /> EXPORTAR_ESTRATÉGIA
+              <Navigation size={14} /> EXPORTAR_ESTRATÉGIA
             </button>
           </div>
         </div>
@@ -296,25 +316,25 @@ Renda: ${realIbgeData?.income == null ? 'INDISPONÍVEL (IBGE)' : formatIntBR(rea
 
       {showExport && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/95 backdrop-blur-sm p-4 pointer-events-auto animate-fade-in font-mono">
-          <div className="bg-black w-full max-w-2xl rounded border border-[#39ff14] p-10 relative">
-            <button onClick={() => setShowExport(false)} className="absolute top-6 right-6 text-[#39ff14] hover:text-white transition-colors"><X size={24} /></button>
+          <div className="bg-app w-full max-w-2xl rounded border border-app p-10 relative">
+            <button onClick={() => setShowExport(false)} className="absolute top-6 right-6 text-accent hover:text-white transition-colors"><X size={24} /></button>
 
             {exportStep === 'selection' && (
               <>
-                <h2 className="text-2xl font-black text-white mb-2 uppercase tracking-tighter">Exportar Comando</h2>
-                <p className="text-[#39ff14]/60 mb-10 font-bold text-[10px] uppercase">Selecione o protocolo de saída</p>
+                <h2 className="text-2xl font-black text-app mb-2 uppercase tracking-tighter">Exportar Comando</h2>
+                <p className="text-muted mb-10 font-bold text-[10px] uppercase">Selecione o protocolo de saída</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  <button onClick={handleCopyPasteSelect} className="flex flex-col items-center p-6 bg-slate-900/50 border border-white/5 hover:border-[#39ff14] transition group">
-                    <Copy className="text-[#39ff14] mb-4" size={32} />
-                    <h3 className="font-bold text-white text-[10px] uppercase">Terminal_Copy</h3>
+                  <button onClick={handleCopyPasteSelect} className="flex flex-col items-center p-6 bg-surface border border-app hover:border-accent transition group">
+                    <Copy className="text-accent mb-4" size={32} />
+                    <h3 className="font-bold text-app text-[10px] uppercase">Terminal_Copy</h3>
                   </button>
-                  <button className="flex flex-col items-center p-6 bg-slate-900/50 border border-white/5 opacity-30 cursor-not-allowed">
-                    <Facebook className="text-slate-500 mb-4" size={32} />
-                    <h3 className="font-bold text-slate-500 text-[10px] uppercase">Meta_Sync</h3>
+                  <button className="flex flex-col items-center p-6 bg-surface border border-app opacity-30 cursor-not-allowed">
+                    <Facebook className="text-muted2 mb-4" size={32} />
+                    <h3 className="font-bold text-muted2 text-[10px] uppercase">Meta_Sync</h3>
                   </button>
-                  <button className="flex flex-col items-center p-6 bg-slate-900/50 border border-white/5 opacity-30 cursor-not-allowed">
-                    <Download className="text-slate-500 mb-4" size={32} />
-                    <h3 className="font-bold text-slate-500 text-[10px] uppercase">GeoJSON_Dump</h3>
+                  <button className="flex flex-col items-center p-6 bg-surface border border-app opacity-30 cursor-not-allowed">
+                    <Download className="text-muted2 mb-4" size={32} />
+                    <h3 className="font-bold text-muted2 text-[10px] uppercase">GeoJSON_Dump</h3>
                   </button>
                 </div>
               </>
@@ -322,19 +342,19 @@ Renda: ${realIbgeData?.income == null ? 'INDISPONÍVEL (IBGE)' : formatIntBR(rea
 
             {exportStep === 'loading' && (
               <div className="flex flex-col items-center justify-center py-12">
-                <Loader2 className="w-12 h-12 text-[#39ff14] animate-spin mb-4" />
-                <h3 className="text-xl font-bold text-white uppercase tracking-widest">Processando...</h3>
+                <Loader2 className="w-12 h-12 text-accent animate-spin mb-4" />
+                <h3 className="text-xl font-bold text-app uppercase tracking-widest">Processando...</h3>
               </div>
             )}
 
             {exportStep === 'result' && (
               <div className="text-center">
-                <h2 className="text-2xl font-black text-white mb-6 flex items-center justify-center gap-2 uppercase">
-                  <Check className="text-[#39ff14]" /> Estratégia_Pronta
+                <h2 className="text-2xl font-black text-app mb-6 flex items-center justify-center gap-2 uppercase">
+                  <Check className="text-ok" /> Estratégia_Pronta
                 </h2>
                 <button
                   onClick={copyToClipboard}
-                  className={`w-full py-4 rounded font-black text-black transition-all flex items-center justify-center gap-2 ${copied ? 'bg-green-500' : 'bg-[#39ff14] shadow-[0_0_20px_#39ff14]/30 hover:scale-[1.02]'}`}
+                  className={`w-full py-4 rounded font-black text-black transition-all flex items-center justify-center gap-2 ${copied ? 'bg-green-500' : 'bg-accent shadow-[0_0_20px_var(--accent)]/30 hover:scale-[1.02]'}`}
                 >
                   {copied ? "COPIADO" : "COPIAR"}
                 </button>

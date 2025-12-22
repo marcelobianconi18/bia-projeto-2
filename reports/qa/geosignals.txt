@@ -1,0 +1,18 @@
+---------------------------------------------------
+🛠️  VERIFYING GEOSIGNALS (IBGE-FIRST / REAL_ONLY)
+---------------------------------------------------
+
+📍 Testing Scenario 1: São Paulo (3550308) - Valid
+   Fetching https://servicodados.ibge.gov.br/api/v3/malhas/municipios/3550308?formato=application/vnd.geo+json...
+   Genereted At: 2025-12-22T04:35:41.739Z
+   RealOnly Mode: true
+   Polygons: 1
+   ✅ Polygon Found: IBGE_MUNICIPIO (IBGE-3550308)
+      Provenance: REAL
+      Pop: 12345678
+      Income: null (Expected null)
+
+📍 Testing Scenario 2: Invalid Geocode (0000000)
+   Fetching https://servicodados.ibge.gov.br/api/v3/malhas/municipios/0000000?formato=application/vnd.geo+json...
+   Polygons: 0
+   ✅ Correctly returned no polygons for invalid code

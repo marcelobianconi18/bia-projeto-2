@@ -1,0 +1,36 @@
+=== IBGE Income Endpoint Verification ===
+Time: 2025-12-22T02:56:32.853Z
+
+Checking city: São Paulo (3550308)
+  [Primary: Censo 2010 (Table 5917/Var 593)]
+    URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/periodos/2010/variaveis/593?localidades=N6[3550308]
+    Status: 500 (Internal Server Error) | Time: 194ms
+    ❌ FAIL: Endpoint returned error.
+
+  [Fallback: Generic Latest (Table 5917/Var 593/-1)]
+    URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/periodos/-1/variaveis/593?localidades=N6[3550308]
+    Status: 500 (Internal Server Error) | Time: 126ms
+    ❌ FAIL: Endpoint returned error.
+
+Checking city: Rio de Janeiro (3304557)
+  [Primary: Censo 2010 (Table 5917/Var 593)]
+    URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/periodos/2010/variaveis/593?localidades=N6[3304557]
+    Status: 500 (Internal Server Error) | Time: 130ms
+    ❌ FAIL: Endpoint returned error.
+
+  [Fallback: Generic Latest (Table 5917/Var 593/-1)]
+    URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/periodos/-1/variaveis/593?localidades=N6[3304557]
+    Status: 500 (Internal Server Error) | Time: 127ms
+    ❌ FAIL: Endpoint returned error.
+
+Checking city: Curitiba (4106902)
+  [Primary: Censo 2010 (Table 5917/Var 593)]
+    URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/periodos/2010/variaveis/593?localidades=N6[4106902]
+    Status: 500 (Internal Server Error) | Time: 126ms
+    ❌ FAIL: Endpoint returned error.
+
+  [Fallback: Generic Latest (Table 5917/Var 593/-1)]
+    URL: https://servicodados.ibge.gov.br/api/v3/agregados/5917/periodos/-1/variaveis/593?localidades=N6[4106902]
+    Status: 500 (Internal Server Error) | Time: 114ms
+    ❌ FAIL: Endpoint returned error.
+

@@ -4,23 +4,33 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "qa:real": "set -e && echo 'Gate A: Build' && npx tsc --noEmit && npm run build && echo 'Gate B: IBGE' && node scripts/verify-ibge-localidades.mjs && node scripts/verify-ibge-indicators.mjs && echo 'Gate C: GeoSignals' && node scripts/verify-geosignals.mjs && echo 'Gate D: Anti-Simulated' && node scripts/verify-real-only-no-simulated.mjs",
+    "qa:phase2": "echo 'Gate A: Build' && npx tsc --noEmit && npm run build && echo 'Gate E: Connectors' && node scripts/verify-connectors-stubs.mjs",
+    "qa:timeseries168": "echo 'Gate A: Build' && npx tsc --noEmit && npm run build && echo 'Gate T: Timeseries' && node scripts/verify-timeseries168.mjs",
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "review": "npm run build && npx serve dist",
+    "dev:server": "node server/index.js"
   },
   "dependencies": {
+    "@google/genai": "^1.33.0",
+    "leaflet": "^1.9.4",
+    "leaflet.heat": "0.2.0",
+    "lucide-react": "0.475.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "leaflet": "^1.9.4",
     "react-leaflet": "^5.0.0",
-    "recharts": "^3.6.0",
-    "lucide-react": "0.475.0",
-    "@google/genai": "^1.33.0",
-    "leaflet.heat": "0.2.0"
+    "recharts": "^3.6.0"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.23",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

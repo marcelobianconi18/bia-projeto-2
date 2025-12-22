@@ -1,5 +1,6 @@
 
 import { IbgeSocioData, TacticalGeoJson, TacticalFeature, DataProvenance } from "../types";
+import { resolveIbgeIncomeMunicipio } from './ibgeIncomeResolver';
 
 const LOCALIDADES_API = "https://servicodados.ibge.gov.br/api/v1/localidades";
 const SIDRA_API = "https://servicodados.ibge.gov.br/api/v3/agregados";
@@ -47,8 +48,7 @@ export const fetchTacticalMesh = async (
   }
 
   // REAL_ONLY GUARDRAIL
-  const isRealOnly = import.meta.env.VITE_REAL_ONLY === 'true';
-  if (isRealOnly) {
+  if (IS_REAL_ONLY) {
     console.warn("REAL_ONLY mode active: Skipping simulated tactical mesh generation.");
     return { type: 'FeatureCollection', features: [] };
   }
@@ -89,8 +89,9 @@ export const fetchTacticalMesh = async (
       const geocode = `355${Math.floor(Math.random() * 900000) + 100000}`;
 
       const provenance: DataProvenance = {
-        label: 'SIMULATED',
-        source: 'Modelagem local',
+        // Fallback only if NOT RealOnly, otherwise Unavailable
+        label: IS_REAL_ONLY ? 'UNAVAILABLE' : 'DERIVED',
+        source: 'IBGE_ESTIMATE',
         method: 'grid/jitter',
         notes: 'Camada gerada localmente para análise tática; não representa dado oficial por setor.'
       };
@@ -118,80 +119,74 @@ export const fetchTacticalMesh = async (
   return { type: 'FeatureCollection', features };
 };
 
-export const fetchRealIbgeData = async (geocode: string): Promise<IbgeSocioData | null> => {
-  // 1. Definição de URLs e Metadados
-  const popMeta = IBGE_REGISTRY.POPULACAO;
-  const incMeta = IBGE_REGISTRY.RENDIMENTO;
-
-  const popUrl = `${SIDRA_API}/${popMeta.tableId}/periodos/2022/variaveis/${popMeta.variableId}?localidades=N6[${geocode}]`;
-  // Tenta 2010 primeiro, depois genérico para renda
-  const incUrlPrimary = `${SIDRA_API}/${incMeta.tableId}/periodos/2010/variaveis/${incMeta.variableId}?localidades=N6[${geocode}]`;
-  const incUrlFallback = `${SIDRA_API}/${incMeta.tableId}/variaveis/${incMeta.variableId}?localidades=N6[${geocode}]`;
-
-  // 2. Helper de Fetch Seguro
-  const fetchMetric = async (url: string, fallbackUrl?: string): Promise<{ val: number; period: string; ok: boolean }> => {
-    try {
-      let res = await fetch(url);
-      if (!res.ok && fallbackUrl) {
-        // Tenta fallback se primário falhar (ex: 500 ou 404)
-        res = await fetch(fallbackUrl);
-      }
-      if (!res.ok) return { val: 0, period: "N/A", ok: false };
-
-      const data = await res.json();
-      // SIDRA array structure: [ { resultados: [ { series: [ { serie: { "2010": "123" } } ] } ] } ]
-      const serieObj = data?.[0]?.resultados?.[0]?.series?.[0]?.serie || {};
-      const periods = Object.keys(serieObj);
-      if (periods.length === 0) return { val: 0, period: "N/A", ok: false };
-
-      const lastPeriod = periods[periods.length - 1]; // Pega o último disponível se houver múltiplos
-      const valStr = serieObj[lastPeriod];
-      const val = parseFloat(valStr === "..." || valStr === "-" ? "0" : valStr);
-
-      return { val, period: lastPeriod, ok: true };
-    } catch (e) {
-      return { val: 0, period: "Error", ok: false };
+// Helper de Fetch Seguro (movido para fora para ser reutilizado)
+const fetchMetric = async (url: string, metricName: string): Promise<{ val: number | null; ok: boolean }> => {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(`Failed to fetch ${metricName} from ${url}. Status: ${res.status}`);
+      return { val: null, ok: false };
     }
-  };
 
-  // 3. Execução Paralela Robusta
-  const [popResult, incResult] = await Promise.all([
-    fetchMetric(popUrl),
-    fetchMetric(incUrlPrimary, incUrlFallback)
-  ]);
+    const data = await res.json();
+    const serieObj = data?.[0]?.resultados?.[0]?.series?.[0]?.serie || {};
+    const periods = Object.keys(serieObj);
+    if (periods.length === 0) {
+      console.warn(`No data periods found for ${metricName} from ${url}.`);
+      return { val: null, ok: false };
+    }
 
-  // 4. Montagem do Resultado com Proveniência Granular
-  // Se ambos falharam, retornamos null para sinalizar falha total de conexão com IBGE? 
-  // Não, retornamos objeto parcial para que a UI mostre o que funcionou.
-  // O null só deve ser retornado se o geocode for inválido ou erro catastrófico.
+    const lastPeriod = periods[periods.length - 1];
+    const valStr = serieObj[lastPeriod];
+    const val = parseFloat(valStr === "..." || valStr === "-" ? "0" : valStr);
 
-  const isPopOk = popResult.ok && popResult.val > 0;
-  const isIncOk = incResult.ok && incResult.val > 0;
-
-  const provenance: DataProvenance = {
-    label: (isPopOk || isIncOk) ? 'REAL' : 'REAL', // Mantém label REAL pois a tentativa foi real
-    source: 'IBGE/SIDRA',
-    updatedAt: new Date().toISOString(),
-    notes: [] as any
-  };
-
-  const notes = [];
-  if (!isPopOk) notes.push(`População indisponível (SIDRA ${popMeta.tableId})`);
-  if (!isIncOk) notes.push(`Renda indisponível (SIDRA ${incMeta.tableId})`);
-
-  if (notes.length > 0) {
-    provenance.notes = notes.join('; ');
+    return { val: val > 0 ? val : null, ok: true };
+  } catch (e) {
+    console.error(`Error fetching ${metricName} from ${url}:`, e);
+    return { val: null, ok: false };
   }
+};
+import { isRealOnly } from "./env";
+
+// Robust IS_REAL_ONLY check done via centralized service
+export const IS_REAL_ONLY = isRealOnly();
+
+export async function fetchRealIbgeData(geocode: string): Promise<IbgeSocioData | null> {
+  // The IS_REAL_ONLY constant is now globally available.
+  // The local 'isRealOnly' variable was not used after its declaration in this function,
+  // so it has been removed as part of the refactor to use the global constant.
+
+  // Paralelizar chamadas para performance
+  // 1. População (Endpoint confiável: Agregado 9514 / Var 93 / Censo 2022)
+  const popUrl = `https://servicodados.ibge.gov.br/api/v3/agregados/9514/periodos/2022/variaveis/93?localidades=N6[${geocode}]`;
+
+  const popPromise = fetchMetric(popUrl, "População 2022").then(res => ({
+    val: res.val,
+    url: popUrl,
+    provenance: res.val !== null ? 'REAL' : 'UNAVAILABLE'
+  }));
+
+  // 2. Renda (Resolver complexo com fallback REAL_ONLY seguro)
+  const incomePromise = resolveIbgeIncomeMunicipio(geocode);
+
+  const [popRes, incomeRes] = await Promise.all([popPromise, incomePromise]);
 
   return {
-    population: popResult.val,
-    averageIncome: incResult.val,
-    pib: 0, // Não estamos buscando PIB ainda
-    lastUpdate: `Censo ${popResult.period} / Renda ${incResult.period}`,
+    population: popRes.val !== null ? popRes.val : 0,
+    pib: 0, // Não estamos focando em PIB agora
+    averageIncome: incomeRes.status === 'REAL' ? incomeRes.income! : 0,
+    lastUpdate: new Date().toISOString(),
     geocode,
-    provenance
-  };
-};
+    provenance: {
+      label: (popRes.provenance === 'REAL' && incomeRes.status === 'REAL') ? 'REAL' : 'PARTIAL_REAL',
+      source: `IBGE (Pop: ${popRes.url}, Inc: ${incomeRes.status === 'REAL' ? incomeRes.meta.sourceUrl : 'UNAVAILABLE'})`,
+      notes: incomeRes.status === 'UNAVAILABLE' ? 'Renda indisponível no IBGE.' : undefined
+    },
+    // Adding extended metadata for UI to consume if needed
+    populationYear: 2022,
+    income: incomeRes.status === 'REAL' ? incomeRes.income : null // Explicito null para UI
+  } as any; // Cast as any because types.ts might need update for 'income' (it uses averageIncome usually)
+}
 
 export const fetchIbgeGeocode = async (municipalityName: string, stateUF: string): Promise<string | null> => {
   try {

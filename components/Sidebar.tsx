@@ -19,7 +19,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onL
 
       {/* Navigation */}
       <div className="flex-1 flex flex-col gap-6 w-full px-2">
-        <button 
+        <button
           onClick={() => onChangeView('COCKPIT')}
           className={`group flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${currentView === 'COCKPIT' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
           title="Cockpit"
@@ -28,7 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onL
           <span className="text-[9px] font-bold uppercase tracking-wider">Cockpit</span>
         </button>
 
-        <button 
+        <button
           onClick={() => onChangeView('EXPLORER')}
           className={`group flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${currentView === 'EXPLORER' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
           title="Mapa"
@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onL
           <span className="text-[9px] font-bold uppercase tracking-wider">Mapa</span>
         </button>
 
-        <button 
+        <button
           onClick={() => onChangeView('COMMAND_CENTER')}
           className={`group flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${currentView === 'COMMAND_CENTER' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
           title="Meta Ads Tactical"
@@ -49,12 +49,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onL
 
       {/* Footer Actions */}
       <div className="flex flex-col gap-4 mt-auto">
-         <button className="text-slate-400 hover:text-blue-600 transition">
-            <Settings size={20} />
-         </button>
-         <button onClick={onLogout} className="text-slate-400 hover:text-red-500 transition">
-            <LogOut size={20} />
-         </button>
+        <button className="text-slate-400 hover:text-blue-600 transition">
+          <Settings size={20} />
+        </button>
+        <button onClick={onLogout} className="text-slate-400 hover:text-red-500 transition">
+          <LogOut size={20} />
+        </button>
       </div>
     </div>
   );

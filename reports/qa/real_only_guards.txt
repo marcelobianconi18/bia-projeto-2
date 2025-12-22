@@ -1,0 +1,24 @@
+components/BiaWarRoomMap.tsx:56:  const isRealOnly = import.meta.env.VITE_REAL_ONLY === 'true';
+components/BiaWarRoomMap.tsx:82:          {(!isRealOnly || (geoSignals?.polygons && geoSignals.polygons.length > 0)) && (
+components/BiaWarRoomMap.tsx:114:                {isRealOnly && (!geoSignals?.polygons || geoSignals.polygons.length === 0) && (
+components/BiaWarRoomMap.tsx:123:          {/* Legacy/Simulated Layers (Hidden in Real Only via geoSignals flows/hotspots check or explicit isRealOnly) */}
+components/BiaWarRoomMap.tsx:144:            {isRealOnly && (
+components/DashboardUI.tsx:36:  const isRealOnly = import.meta.env.VITE_REAL_ONLY === 'true';
+components/DashboardUI.tsx:77:    const scoreText = isRealOnly ? 'N/A (REAL_ONLY)' : `${analysis?.score ?? 'N/A'}/100`;
+components/DashboardUI.tsx:78:    const verdictText = isRealOnly ? 'REAL_ONLY: IA desativada' : (analysis?.verdict ?? 'N/A');
+components/DashboardUI.tsx:104:      totalPopulation: isRealOnly ? formatIntBR(population) : "N/A",
+components/DashboardUI.tsx:105:      avgScore: isRealOnly ? null : (analysis?.score ?? 72),
+components/DashboardUI.tsx:106:      reach: isRealOnly ? "N/A" : "340k"
+components/DashboardUI.tsx:108:  }, [analysis, isRealOnly, realIbgeData]);
+components/DashboardUI.tsx:124:                {briefing.geography.city} // {isRealOnly ? 'REAL_ONLY' : 'SCAN_MODE'}
+components/DashboardUI.tsx:154:                disabled={isRealOnly}
+components/DashboardUI.tsx:156:              {isRealOnly && (
+components/DashboardUI.tsx:173:                  onClick={() => !isRealOnly && toggleSetting(l.id as any)}
+components/DashboardUI.tsx:174:                  className={`w-full flex items-center justify-between p-3 border transition-all ${isRealOnly
+components/DashboardUI.tsx:182:                  <div className={`w-1.5 h-1.5 ${!isRealOnly && settings[l.id as keyof MapSettings] ? 'bg-[#39ff14] shadow-[0_0_5px_#39ff14]' : 'bg-slate-800'}`} />
+components/DashboardUI.tsx:185:              {isRealOnly && (
+components/DashboardUI.tsx:221:                  {isRealOnly ? "REAL_ONLY" : (metrics.avgScore > 75 ? "ALVO_CRITICO" : "TERRITORIO_NEUTRO")}
+components/DashboardUI.tsx:236:              {'>>'} "{isRealOnly ? 'REAL_ONLY: sem IA' : (analysis?.verdict ?? 'N/A')}"
+components/DashboardUI.tsx:249:            {isRealOnly ? (
+components/DashboardUI.tsx:280:              disabled={isRealOnly}
+components/DashboardUI.tsx:294:        {!isRealOnly && <ExplainabilityCard analysis={analysis} />}

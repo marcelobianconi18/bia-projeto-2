@@ -1,0 +1,19 @@
+{
+  "polygons": [
+    {
+      "id": "IBGE-4106902",
+      "kind": "IBGE_MUNICIPIO",
+      "properties": {
+        "geocode": "4106902"
+      },
+      "provenance": {
+        "label": "REAL",
+        "source": "IBGE"
+      }
+    }
+  ],
+  "meta": {
+    "verified": true,
+    "date": "2025-12-22T05:09:24.957Z"
+  }
+}

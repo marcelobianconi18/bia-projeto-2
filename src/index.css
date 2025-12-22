@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --bg: #1E1E1E;
+    --surface: #595959;
+    --surface-2: rgba(89, 89, 89, 0.55);
+    --border: rgba(166, 166, 166, 0.28);
+    --text: #F1EFEF;
+    --muted: #D0D0D0;
+    --muted-2: #A6A6A6;
+
+    /* estados */
+    --danger: #595959;
+    --warn: #A6A6A6;
+    --ok: #F1EFEF;
+
+    /* foco/realce (sem neon) */
+    --accent: #A6A6A6;
+    --accent-contrast: #1E1E1E;
+}
+
+.theme-light {
+    --bg: #F1EFEF;
+    --surface: #D0D0D0;
+    --surface-2: rgba(208, 208, 208, 0.55);
+    --border: rgba(89, 89, 89, 0.22);
+    --text: #1E1E1E;
+    --muted: #595959;
+    --muted-2: #A6A6A6;
+
+    --danger: #595959;
+    --warn: #595959;
+    --ok: #1E1E1E;
+
+    --accent: #595959;
+    --accent-contrast: #F1EFEF;
+}
+
+/* helpers utilitários (para reduzir hardcode em componentes) */
+.bg-app {
+    background: var(--bg);
+}
+
+.bg-surface {
+    background: var(--surface);
+}
+
+.bg-surface2 {
+    background: var(--surface-2);
+}
+
+.text-app {
+    color: var(--text);
+}
+
+.text-muted {
+    color: var(--muted);
+}
+
+.text-muted2 {
+    color: var(--muted-2);
+}
+
+.border-app {
+    border-color: var(--border);
+}
+
+html,
+body,
+#root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+.leaflet-container {
+    width: 100%;
+    height: 100%;
+}
+
+:root[data-theme="light"] {
+    --bg: #F1EFEF;
+    --surface: #FFFFFF;
+    --surface-2: #D0D0D0;
+    --border: #D0D0D0;
+    --text: #1E1E1E;
+    --muted: #595959;
+    --muted-2: #A6A6A6;
+    --accent: #1E1E1E;
+    --ok: #1E1E1E;
+}
+
+:root[data-theme="dark"] {
+    --bg: #1E1E1E;
+    --surface: #2a2a2a;
+    --surface-2: #595959;
+    --border: #A6A6A6;
+    --text: #F1EFEF;
+    --muted: #D0D0D0;
+    --muted-2: #A6A6A6;
+    --accent: #1E1E1E;
+    /* user suggestion, though maybe too dark for accent? keeping as requested */
+    --ok: #39ff14;
+}

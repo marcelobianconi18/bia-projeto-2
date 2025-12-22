@@ -1,35 +1,36 @@
 
 import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { AppStep, BriefingData, GeminiAnalysis, MapSettings, DashboardView, RichLocationData } from './types';
-
-// ... (lines 4-165 unchanged)
-
+import { AppStep, BriefingData, BriefingInteligente, GeminiAnalysis, MapSettings, DashboardView, RichLocationData, ScanResult } from './types';
 import { BriefingWizard } from './components/BriefingWizard';
+import { Sidebar } from './components/Sidebar';
+import { analyzeBriefing } from './services/geminiService';
+import { fetchIbgeGeocode, fetchRealIbgeData, isInsideBrazil } from './services/ibgeService';
+import { runBriefingScan } from './services/scanOrchestrator';
+import { AlertTriangle } from 'lucide-react';
+import { useTheme } from './src/hooks/useTheme';
+
 // Lazy load heavy components
 const ExplorerPage = React.lazy(() => import('./components/ExplorerPage').then(module => ({ default: module.ExplorerPage })));
 const CockpitHome = React.lazy(() => import('./components/CockpitHome').then(module => ({ default: module.CockpitHome })));
 const MetaCommandCenter = React.lazy(() => import('./components/MetaCommandCenter').then(module => ({ default: module.MetaCommandCenter })));
-// Keep BriefingWizard import comment removed to avoid clutter
-// BriefingWizard is imported at top
-
-import { Sidebar } from './components/Sidebar';
-import { analyzeBriefing } from './services/geminiService';
-import { fetchIbgeGeocode, fetchRealIbgeData, isInsideBrazil } from './services/ibgeService';
-import { Database, ShieldCheck, Globe, AlertTriangle } from 'lucide-react';
 
 const DEFAULT_CENTER: [number, number] = [-23.5505, -46.6333];
 
 const App: React.FC = () => {
   const isRealOnly = import.meta.env.VITE_REAL_ONLY === 'true';
+  const { theme } = useTheme();
 
   const [view, setView] = useState<AppStep>(AppStep.BRIEFING);
   const [dashboardView, setDashboardView] = useState<DashboardView>('COCKPIT');
+
+  const [rawBriefing, setRawBriefing] = useState<BriefingInteligente | null>(null);
   const [briefingData, setBriefingData] = useState<BriefingData | null>(null);
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+
   const [analysis, setAnalysis] = useState<GeminiAnalysis | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number]>(DEFAULT_CENTER);
   const [loadingStatus, setLoadingStatus] = useState("Iniciando BIA Protocol...");
-  const [isRealDataAvailable, setIsRealDataAvailable] = useState(true);
   const [outOfJurisdiction, setOutOfJurisdiction] = useState(false);
 
   const [mapSettings, setMapSettings] = useState<MapSettings>({
@@ -54,11 +55,11 @@ const App: React.FC = () => {
     const level = briefingData.geography.level;
     const cityLabel = briefingData.geography.city.split(',')[0] || "Alvo";
 
-    // Spread dinâmico: Cidade = 0.02, Estado = 1.5, País = 10
+    // Spread dinâmico
     const spread = level === 'city' ? 0.025 : level === 'state' ? 1.8 : 8;
 
     return Array.from({ length: 20 }, (_, i) => {
-      const angle = (i * 137.5 * Math.PI) / 180; // Distribuição orgânica (Phyllotaxis)
+      const angle = (i * 137.5 * Math.PI) / 180;
       const dist = Math.sqrt(i) * (spread / Math.sqrt(20));
       const hLat = lat + Math.sin(angle) * dist;
       const hLng = lng + Math.cos(angle) * dist;
@@ -66,69 +67,136 @@ const App: React.FC = () => {
       if (!isInsideBrazil(hLat, hLng)) return null;
 
       return {
-        id: i + 1,
-        rank: i + 1,
-        name: `${cityLabel.toUpperCase()} - CLUSTER ${i + 1}`,
-        score: Math.floor(70 + Math.random() * 29),
+        id: String(i + 1),
+        point: { lat: hLat, lng: hLng },
+        properties: {
+          id: String(i + 1),
+          kind: 'CUSTOM_PIN',
+          rank: i + 1,
+          name: `${cityLabel.toUpperCase()} - CLUSTER ${i + 1}`,
+          score: Math.floor(70 + Math.random() * 29),
+        },
+        provenance: { label: 'DERIVED', source: 'Heuristic Spread' },
+        // Legacy
         lat: hLat,
         lng: hLng,
-        type: level === 'city' ? 'Micro-Setor' : level === 'state' ? 'Município-Chave' : 'Região Econômica'
+        label: `${cityLabel.toUpperCase()} - CLUSTER ${i + 1}`
       };
-    }).filter(h => h !== null);
+    }).filter(h => h !== null) as any[]; // Cast to avoid complex type match with strict filtering
   }, [briefingData, mapCenter, outOfJurisdiction, isRealOnly]);
 
-  const handleBriefingComplete = async (data: BriefingData) => {
-    const lat = data.geography?.lat || DEFAULT_CENTER[0];
-    const lng = data.geography?.lng || DEFAULT_CENTER[1];
-
-    if (!isInsideBrazil(lat, lng)) {
-      setOutOfJurisdiction(true);
-      setBriefingData(data);
-      setView(AppStep.DASHBOARD);
-      return;
-    }
-
-    setOutOfJurisdiction(false);
-    setBriefingData(data);
+  const handleBriefingComplete = async (data: BriefingInteligente) => {
+    setRawBriefing(data);
     setView(AppStep.LOADING);
-    setMapCenter([lat, lng]);
-
-    // Ajuste de Zoom baseado no nível
-    const newZoom = data.geography.level === 'city' ? 13 : data.geography.level === 'state' ? 7 : 4;
-    setMapSettings(prev => ({ ...prev, zoom: newZoom }));
+    setLoadingStatus("Iniciando Scan Real...");
 
     try {
-      setLoadingStatus("Auditoria de Metadados IBGE...");
-      const firstLoc = data.geography.selectedItems[0];
-      if (firstLoc && typeof firstLoc !== 'string') {
-        const geocode = await fetchIbgeGeocode(firstLoc.hierarchy.municipality, firstLoc.hierarchy.state);
-        if (geocode) {
-          setLoadingStatus("Sincronização SIDRA v3 Real...");
-          const ibgeStats = await fetchRealIbgeData(geocode);
-          if (ibgeStats) {
-            firstLoc.ibgeData = ibgeStats;
-            setIsRealDataAvailable(true);
-          }
-        }
+      // 1. Run Orchestrator
+      const scan = await runBriefingScan(data);
+      setScanResult(scan);
+
+      // 2. Validate Geocode
+      if (scan.geocode.status === 'ERROR' || !scan.geocode.data) {
+        alert("Falha na geocodificação. Tente outra cidade.");
+        setView(AppStep.BRIEFING);
+        return;
       }
+
+      const { lat, lng } = scan.geocode.data;
+
+      if (!isInsideBrazil(lat, lng)) {
+        setOutOfJurisdiction(true);
+        setMapCenter([lat, lng]);
+        // Create dummy legacy data for view
+        const legacyData: BriefingData = {
+          productDescription: data.productDescription,
+          contactMethod: data.contactMethod,
+          usageDescription: data.usageDescription,
+          operationalModel: data.operationalModel || null,
+          dataSources: data.dataSources,
+          marketPositioning: data.marketPositioning || null,
+          targetGender: data.targetGender || null,
+          targetAge: data.targetAge,
+          geography: {
+            city: data.geography.city,
+            state: data.geography.state || [],
+            country: data.geography.country || 'BR',
+            lat, lng,
+            level: data.geography.level,
+            selectedItems: []
+          },
+          objective: data.objective || null
+        };
+        setBriefingData(legacyData);
+        setView(AppStep.DASHBOARD);
+        return;
+      }
+
+      setOutOfJurisdiction(false);
+      setMapCenter([lat, lng]);
+
+      // 3. Map to Legacy Data (Adapter Pattern for UI compatibility)
+      const legacyData: BriefingData = {
+        productDescription: data.productDescription,
+        contactMethod: data.contactMethod,
+        usageDescription: data.usageDescription,
+        operationalModel: data.operationalModel || null,
+        dataSources: data.dataSources,
+        marketPositioning: data.marketPositioning || null,
+        targetGender: data.targetGender || null,
+        targetAge: data.targetAge,
+        geography: {
+          city: data.geography.city,
+          state: data.geography.state || [],
+          country: data.geography.country || 'BR',
+          lat, lng,
+          level: data.geography.level,
+          selectedItems: [{
+            id: 'MainLocation',
+            shortName: data.geography.city.split(',')[0],
+            fullName: scan.geocode.data.displayName,
+            hierarchy: { municipality: data.geography.city.split(',')[0], state: '' },
+            coords: { lat, lng },
+            // Inject Real IBGE Data into the location object if available
+            ibgeData: scan.ibge.status === 'SUCCESS' && scan.ibge.data ? {
+              population: scan.ibge.data.population,
+              pib: 0,
+              averageIncome: scan.ibge.data.income || 0,
+              lastUpdate: '2022',
+              geocode: '0000000',
+              provenance: {
+                label: scan.ibge.provenance,
+                source: scan.ibge.sourceUrl || 'IBGE'
+              }
+            } : undefined
+          }]
+        },
+        objective: data.objective || null
+      };
+
+      setBriefingData(legacyData);
+
+      // 4. Gemini Analysis (Gated)
+      if (isRealOnly) {
+        setLoadingStatus("Modo REAL_ONLY: Ignorando IA Gerativa...");
+        setAnalysis(null);
+      } else {
+        setLoadingStatus("Sincronizando Inteligência Gemini...");
+        const result = await analyzeBriefing(legacyData);
+        setAnalysis(result);
+      }
+
+      setTimeout(() => {
+        setView(AppStep.DASHBOARD);
+        setDashboardView('COCKPIT');
+      }, 500);
+
     } catch (e) {
-      setIsRealDataAvailable(false);
+      console.error(e);
+      setLoadingStatus("Erro Crítico no Scan.");
     }
-
-    if (isRealOnly) {
-      setLoadingStatus("Modo REAL_ONLY: Ignorando IA...");
-      setAnalysis(null);
-    } else {
-      setLoadingStatus("Sincronizando Inteligência Gemini...");
-      const result = await analyzeBriefing(data);
-      setAnalysis(result);
-    }
-
-    setTimeout(() => {
-      setView(AppStep.DASHBOARD);
-      setDashboardView('COCKPIT');
-    }, 800);
   };
+
 
   const renderDashboardView = () => {
     if (outOfJurisdiction) {
@@ -164,7 +232,40 @@ const App: React.FC = () => {
     }
   };
 
-  if (view === AppStep.BRIEFING) return <BriefingWizard onComplete={handleBriefingComplete} />;
+  const handleExplorerStart = () => {
+    // Default data for free exploration
+    const explorerData: BriefingData = {
+      productDescription: 'Exploração Livre',
+      contactMethod: 'N/A',
+      usageDescription: 'N/A',
+      operationalModel: 'Digital',
+      dataSources: {
+        ibge: { connected: true },
+        osm: { connected: true },
+        googleAds: { connected: false },
+        metaAds: { connected: false },
+        rfb: { connected: false }
+      },
+      marketPositioning: 'Premium',
+      targetGender: 'Mixed',
+      targetAge: [],
+      geography: {
+        city: 'São Paulo, SP',
+        state: [],
+        country: 'BR',
+        lat: -23.5505,
+        lng: -46.6333,
+        level: 'City',
+        selectedItems: []
+      },
+      objective: 'DominateRegion'
+    };
+    setBriefingData(explorerData);
+    setView(AppStep.DASHBOARD);
+    setDashboardView('EXPLORER');
+  };
+
+  if (view === AppStep.BRIEFING) return <BriefingWizard onComplete={handleBriefingComplete} onExplorerMode={handleExplorerStart} />;
 
   if (view === AppStep.LOADING) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center font-mono text-[#39ff14]">
@@ -174,9 +275,9 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="w-screen h-screen bg-[#f8f9fa] flex overflow-hidden">
+    <div className="w-screen h-screen bg-app flex overflow-hidden">
       <Sidebar currentView={dashboardView} onChangeView={setDashboardView} onLogout={() => setView(AppStep.BRIEFING)} />
-      <div className="flex-1 relative h-full">{renderDashboardView()}</div>
+      <div className="flex-1 min-h-0 relative h-full">{renderDashboardView()}</div>
     </div>
   );
 };

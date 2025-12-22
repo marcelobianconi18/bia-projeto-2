@@ -1,231 +1,257 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
-import {
-  MapContainer,
-  TileLayer,
-  LayersControl,
-  useMap,
-  LayerGroup,
-  GeoJSON,
-  CircleMarker,
-  Tooltip
-} from 'react-leaflet';
+import React, { useEffect, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, LayersControl, LayerGroup, GeoJSON } from 'react-leaflet';
 import L from 'leaflet';
-import { MapSettings, TacticalGeoJson, TacticalFeature, IbgeSocioData } from '../types';
-import { ProvenanceBadge } from './ProvenanceBadge';
-import { Database, ExternalLink, ShieldAlert, Zap } from 'lucide-react';
-import { fetchTacticalMesh, IBGE_REGISTRY, isInsideBrazil } from '../services/ibgeService';
+import 'leaflet/dist/leaflet.css';
+import 'leaflet.heat';
+import { BriefingData, TacticalGeoJson, IbgeSocioData, GeoSignals } from '../types';
+import { fetchTacticalMesh } from '../services/ibgeService';
+import { isRealOnly } from '../services/env';
 
-const MapController = ({ center, zoom, setMapInstance, onZoomChange }: {
-  center: [number, number],
-  zoom: number,
-  setMapInstance?: (m: L.Map) => void,
-  onZoomChange?: (z: number) => void
-}) => {
+// Leaflet Icon fix
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// Custom Icons
+const competitorIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+// Component to handle map center updates
+const RecenterAutomatically = ({ lat, lng, zoom }: { lat: number; lng: number, zoom?: number }) => {
   const map = useMap();
   useEffect(() => {
-    if (setMapInstance) setMapInstance(map);
-    map.on('zoomend', () => onZoomChange?.(map.getZoom()));
-  }, [map]);
-  useEffect(() => { map.flyTo(center, zoom, { duration: 1.5 }); }, [center, zoom]);
+    map.setView([lat, lng], zoom || map.getZoom());
+  }, [lat, lng, zoom, map]);
   return null;
 };
 
 interface BiaWarRoomMapProps {
   center: [number, number];
-  settings: MapSettings;
-  setMapInstance?: (m: L.Map) => void;
-  hotspots?: any[];
+  zoom?: number;
+  settings: {
+    showHeatmap: boolean;
+    showCompetitors: boolean;
+    showIsochrone: boolean;
+    showTacticalMesh?: boolean;
+    showHotspots?: boolean;
+  };
+  className?: string;
+  briefingData: BriefingData;
+  setMapInstance?: (map: L.Map | null) => void;
   selectedHotspotId?: number | null;
-  onSelectFeature?: (feature: TacticalFeature) => void;
-  cityName?: string;
+  onSelectFeature?: (featureId: string) => void;
+  cityName?: string; // e.g. "Curitiba - PR"
   realIbgeData?: IbgeSocioData | null;
+  geoSignals?: GeoSignals;
 }
 
 export const BiaWarRoomMap: React.FC<BiaWarRoomMapProps> = ({
   center,
+  zoom,
   settings,
+  className,
+  briefingData,
   setMapInstance,
   selectedHotspotId,
   onSelectFeature,
   cityName,
-  realIbgeData
+  realIbgeData,
+  geoSignals
 }) => {
-  const isRealOnly = import.meta.env.VITE_REAL_ONLY === 'true';
+  const isRealOnlyMode = isRealOnly();
   const [meshData, setMeshData] = useState<TacticalGeoJson | null>(null);
-  const [currentZoom, setCurrentZoom] = useState(settings.zoom || 13);
+  const [currentZoom, setCurrentZoom] = useState(zoom || 13);
 
-  // Só buscamos a malha de quarteirões se estivermos em zoom de proximidade
+  // Cleanup: Removed simulated tactical mesh effect entirely as per Datlo-Style Real Data requirement.
+
+  // Heatmap Layer Effect
   useEffect(() => {
-    if (currentZoom >= 11) {
-      fetchTacticalMesh(center, cityName || "Região", realIbgeData).then(setMeshData);
-    } else {
-      setMeshData(null);
-    }
-  }, [center, cityName, realIbgeData, currentZoom]);
+    // Phase 1 Real Data: Heatmaps disabled in REAL_ONLY until we have real density data
+  }, [settings.showHeatmap, center]);
 
-  const isAbroad = !isInsideBrazil(center[0], center[1]);
 
-  const getStyle = (feature: any) => {
-    const volume = feature.properties.volume;
-    const color = volume > 80 ? '#39ff14' :
-      volume > 60 ? '#00f3ff' :
-        volume > 40 ? '#bc13fe' :
-          volume > 20 ? '#ff0055' : '#1e293b';
+  const [isLightMode, setIsLightMode] = useState(false);
 
-    return {
-      fillColor: color,
-      weight: 1,
-      opacity: 0.3,
-      color: color,
-      fillOpacity: 0.15
-    };
-  };
+  useEffect(() => {
+    // Check initial state
+    setIsLightMode(document.documentElement.classList.contains('theme-light'));
 
-  const onEachFeature = (feature: any, layer: L.Layer) => {
-    layer.on({
-      click: (e) => {
-        L.DomEvent.stopPropagation(e);
-        onSelectFeature?.(feature);
-      },
-      mouseover: (e: any) => {
-        const l = e.target;
-        l.setStyle({ fillOpacity: 0.5, weight: 2, color: '#ffffff' });
-      },
-      mouseout: (e: any) => {
-        const l = e.target;
-        l.setStyle(getStyle(feature));
-      }
+    // Observer for class changes on html element
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          setIsLightMode(document.documentElement.classList.contains('theme-light'));
+        }
+      });
     });
-  };
+
+    observer.observe(document.documentElement, { attributes: true });
+    return () => observer.disconnect();
+  }, []);
+
+  const tileUrl = isLightMode
+    ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+
+  const attribution = isLightMode
+    ? '&copy; <a href="https://carto.com/">CartoDB</a> Positron'
+    : '&copy; <a href="https://carto.com/">CartoDB</a> Dark Matter';
 
   return (
-    <div className="h-full w-full bg-[#020617] relative overflow-hidden font-sans">
-      <div className="absolute inset-0 pointer-events-none z-[400] overflow-hidden opacity-5">
-        <div className="absolute top-1/2 left-1/2 w-[250%] h-[250%] -translate-x-1/2 -translate-y-1/2 animate-radar-sweep bg-[conic-gradient(from_0deg,transparent_0deg,transparent_330deg,rgba(57,255,20,0.3)_360deg)]"></div>
-      </div>
-
+    <div className={`relative ${className}`}>
       <MapContainer
         center={center}
-        zoom={settings.zoom}
-        style={{ height: '100%', width: '100%' }}
-        zoomControl={false}
-        attributionControl={false}
+        zoom={currentZoom}
+        scrollWheelZoom={true}
+        className="h-full w-full rounded-xl z-0"
+        ref={setMapInstance}
+        style={{ height: "100%", width: "100%", minHeight: "100%" }}
       >
-        <MapController center={center} zoom={settings.zoom} setMapInstance={setMapInstance} onZoomChange={setCurrentZoom} />
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+        <RecenterAutomatically lat={center[0]} lng={center[1]} zoom={zoom} />
 
         <LayersControl position="topright">
-          <LayersControl.Overlay checked name="🏛️ Malha Tática (Simulada)">
-            {!isRealOnly ? (
+          {/* GeoSignals Polygons (REAL) */}
+          {(!isRealOnlyMode || (geoSignals?.polygons && geoSignals.polygons.length > 0)) && (
+            <LayersControl.Overlay checked name="🗺️ Limites IBGE (Real)">
               <LayerGroup>
-                {meshData && (
-                  <GeoJSON
-                    key={`mesh-neon-${center[0]}-${center[1]}`}
-                    data={meshData as any}
-                    style={getStyle}
-                    onEachFeature={(feature: any, layer: any) => {
-                      onEachFeature(feature, layer);
-                      try {
-                        const prov = feature.properties?.provenance;
-                        const tooltipHtml = `<div style="font-family:monospace;font-size:11px;color:#fff">` +
-                          `<div class=\"font-black\">SETOR_${feature.properties?.geocode}</div>` +
-                          `<div style=\"color:#9ca3af;margin-top:6px;\">Match: ${feature.properties?.volume}%</div>` +
-                          (prov ? `<div style=\"margin-top:6px; font-size:10px; color:#d1fae5\">Fonte: ${prov.source} (${prov.label})</div>` : '') +
-                          `</div>`;
-                        layer.bindTooltip(tooltipHtml, { sticky: true });
-                      } catch (e) { /* ignore */ }
-                    }}
-                  />
+                {geoSignals?.polygons.filter(p => p.provenance.label === 'REAL').map(poly => {
+                  // Simple Choropleth based on Population
+                  const pop = poly.properties.population || 0;
+                  const getColor = (p: number) => {
+                    if (p > 500000) return '#b91c1c'; // Red-700
+                    if (p > 200000) return '#c2410c'; // Orange-700
+                    if (p > 100000) return '#ca8a04'; // Yellow-600
+                    if (p > 50000) return '#65a30d'; // Lime-600
+                    return '#15803d'; // Green-700
+                  };
+
+                  return (
+                    <GeoJSON
+                      key={poly.id}
+                      data={poly.geometry}
+                      style={{
+                        color: isLightMode ? '#64748b' : '#1e293b',
+                        weight: 1,
+                        fillColor: getColor(pop),
+                        fillOpacity: 0.4,
+                      }}
+                      onEachFeature={(feature, layer) => {
+                        layer.bindTooltip(`
+                                <div class="font-bold text-xs">
+                                    ${poly.properties.name || 'Setor IBGE'}
+                                    <br/>
+                                    <span class="text-[10px] text-gray-500">
+                                        Pop: ${poly.properties.population?.toLocaleString('pt-BR') || 'N/A'}
+                                        <br/>
+                                        Renda: ${poly.properties.income ? 'R$ ' + poly.properties.income : 'INDISPONÍVEL (IBGE)'}
+                                    </span>
+                                    <br/>
+                                    <span class="inline-block px-1 rounded bg-green-600 text-white text-[9px] mt-1">REAL DATA (IBGE)</span>
+                                </div>
+                             `, { sticky: true, direction: 'top' });
+                      }}
+                    />
+                  );
+                })}
+
+                {/* Empty State for REAL ONLY if no polygons */}
+                {isRealOnlyMode && (!geoSignals?.polygons || geoSignals.polygons.length === 0) && (
+                  // We don't render anything on map, but UI should show UNAVAILABLE.
+                  // Map component logic handles visual layers only.
+                  null
                 )}
               </LayerGroup>
-            ) : null}
-          </LayersControl.Overlay>
+            </LayersControl.Overlay>
+          )}
 
-          <LayersControl.Overlay checked name="🔵 Focos de Audiência">
-            {!isRealOnly ? (
+          {/* Legacy/Simulated Layers (Hidden in Real Only via geoSignals flows/hotspots check or explicit isRealOnly) */}
+          {/* NOTE: With GeoSignals, we prefer using that model. If not present, we check legacy settings if NOT strict. */}
+
+          {isRealOnlyMode && (
+            <LayersControl.Overlay checked name="⚠️ Modo Real (Simulação Desativada)">
               <LayerGroup>
-                {/* Se o zoom for baixo, mostramos apenas marcadores de clusters macro */}
-                {(currentZoom < 11 ? [] : meshData?.features.filter(f => f.properties.volume > 50) || []).map(f => {
-                  const centroid = L.geoJSON(f.geometry).getBounds().getCenter();
-                  return (
-                    <CircleMarker
-                      key={`centroid-${f.properties.id}`}
-                      center={centroid}
-                      radius={f.properties.volume / 10}
-                      pathOptions={{
-                        fillColor: '#00f3ff',
-                        fillOpacity: 0.4,
-                        color: '#00f3ff',
-                        weight: 2,
-                        className: 'neon-glow'
-                      }}
-                    >
-                      <Tooltip sticky>
-                        <div className="p-3 font-mono text-[10px] bg-slate-900 text-white border border-cyan-500 rounded shadow-xl">
-                          <span className="font-black uppercase">SETOR_{f.properties.geocode}</span>
-                          <div className="mt-2">
-                            <p className="text-cyan-400">Match: {f.properties.volume}%</p>
-                            <p className="text-slate-400">Renda Est.: R$ {f.properties.income.toFixed(0)}</p>
-                            {f.properties.provenance && (
-                              <p className="text-[10px] mt-2 text-slate-300">Fonte: {f.properties.provenance.source} • {f.properties.provenance.label}</p>
-                            )}
-                          </div>
-                        </div>
-                      </Tooltip>
-                    </CircleMarker>
-                  )
-                })}
+                {/* Placeholder for real/strict mode feedback if needed */}
               </LayerGroup>
-            ) : null}
-          </LayersControl.Overlay>
+            </LayersControl.Overlay>
+          )}
+
+          {/* Simulated Competitors (Only if NOT Real Only) */}
+          {!isRealOnlyMode && settings.showCompetitors && (
+            <LayersControl.Overlay checked name="📍 Concorrentes (Sim)">
+              <LayerGroup>
+                <Marker position={[center[0] + 0.002, center[1] - 0.002]} icon={competitorIcon}>
+                  <Popup>
+                    <div className="text-slate-900 font-bold">Concorrente A</div>
+                    <div className="text-slate-600 text-xs">Alto fluxo detectado</div>
+                  </Popup>
+                </Marker>
+                <Marker position={[center[0] - 0.003, center[1] + 0.001]} icon={competitorIcon}>
+                  <Popup>
+                    <div className="text-slate-900 font-bold">Concorrente B</div>
+                    <div className="text-slate-600 text-xs">Público-alvo similar</div>
+                  </Popup>
+                </Marker>
+              </LayerGroup>
+            </LayersControl.Overlay>
+          )}
+
+          {/* Tactical Mesh (Only if NOT Real Only) */}
+          {!isRealOnlyMode && meshData && (
+            <LayersControl.Overlay checked={settings.showTacticalMesh} name="📊 Malha Tática (Sim)">
+              <GeoJSON
+                data={meshData}
+                style={(feature) => ({
+                  fillColor: (feature?.properties?.volume || 0) > 80 ? '#ef4444' : '#3b82f6',
+                  weight: 1,
+                  opacity: 0.3,
+                  color: 'white',
+                  fillOpacity: 0.4
+                })}
+                onEachFeature={(feature, layer) => {
+                  layer.on({
+                    click: () => onSelectFeature && onSelectFeature(feature.properties.id)
+                  });
+                  layer.bindTooltip(`Setor Tático #${feature.properties.id} (Score: ${feature.properties.volume})`);
+                }}
+              />
+            </LayersControl.Overlay>
+          )}
+
         </LayersControl>
+
+        <TileLayer
+          attribution={attribution}
+          url={tileUrl}
+        />
       </MapContainer>
 
-      {/* FOOTER RASTRABILIDADE */}
-      {/* LEGEND - Provenance */}
-      <div className="absolute bottom-6 right-6 z-[1000] flex flex-col gap-2 pointer-events-auto">
-        <div className="bg-black/70 px-3 py-2 rounded-xl border border-white/10 flex items-center gap-3">
-          <div className="flex flex-col text-[10px] text-slate-300">
-            <div className="flex items-center gap-2"><span className="text-slate-400">Malha Tática</span> <ProvenanceBadge provenance={{ label: 'SIMULATED', source: 'Modelagem local', method: 'grid/jitter' }} /></div>
-            <div className="flex items-center gap-2 mt-1"><span className="text-slate-400">IBGE Município</span> <ProvenanceBadge provenance={{ label: 'REAL', source: 'IBGE/SIDRA' }} /></div>
-          </div>
+      {/* Legend / Info Overlay */}
+      <div className={`absolute bottom-5 right-5 p-3 rounded-lg border text-xs z-[1000] ${isLightMode ? 'bg-white/90 border-slate-200 text-slate-700' : 'bg-slate-900/90 border-slate-700 text-slate-300'
+        }`}>
+        <h4 className={`font-bold mb-1 flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+          🚦 GeoSignals Phase 1
+          {isRealOnlyMode && <span className="bg-green-600 text-white px-1.5 py-0.5 rounded text-[9px]">REAL ONLY</span>}
+        </h4>
+        <div className="flex items-center gap-2 mb-1">
+          <div className={`w-3 h-3 opacity-20 border ${isLightMode ? 'bg-emerald-500 border-emerald-500' : 'bg-[#39ff14] border-[#39ff14]'}`}></div>
+          <span>IBGE Malhas (Oficial)</span>
         </div>
-      </div>
-      <div className="absolute bottom-6 left-6 z-[1000] flex flex-col gap-2 pointer-events-none">
-        {isAbroad ? (
-          <div className="bg-red-600/90 px-4 py-2.5 rounded-xl border border-white/30 flex items-center gap-3 backdrop-blur-md shadow-2xl">
-            <ShieldAlert size={16} className="text-white" />
-            <span className="text-white font-black text-[9px] uppercase tracking-widest">FORA DE JURISDIÇÃO</span>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {isRealOnly && (
-              <div className="bg-amber-500/90 px-4 py-2 rounded-xl border border-amber-300/30 flex items-center gap-2 backdrop-blur-md shadow-2xl">
-                <ShieldAlert size={14} className="text-black" />
-                <span className="text-black font-black text-[8px] uppercase tracking-widest">REAL_ONLY: SIMULAÇÕES DESATIVADAS</span>
-              </div>
-            )}
-            <div className="bg-slate-950/90 px-4 py-2.5 rounded-xl border border-cyan-500/30 flex items-center gap-3 backdrop-blur-md shadow-2xl pointer-events-auto">
-              <Database size={16} className="text-cyan-400" />
-              <div className="flex flex-col">
-                <span className="text-slate-500 text-[8px] font-black uppercase tracking-widest leading-none mb-1">Truth Anchor IBGE</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-bold text-[10px] uppercase tracking-tighter">
-                    {(cityName || "Região").toUpperCase()} // SCAN_ACTIVE
-                  </span>
-                </div>
-              </div>
-            </div>
+        {isRealOnlyMode && (
+          <div className={`text-[10px] mt-1 max-w-[150px] ${isLightMode ? 'text-slate-500' : 'text-gray-400'}`}>
+            * Dados simulados (Hotspots/Flows) desativados para compliance.
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes radar-sweep { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-        .animate-radar-sweep { animation: radar-sweep 12s linear infinite; }
-        .neon-glow { filter: drop-shadow(0 0 5px #00f3ff); }
-      `}</style>
     </div>
   );
 };

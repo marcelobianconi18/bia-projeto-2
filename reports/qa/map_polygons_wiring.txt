@@ -1,0 +1,4 @@
+42:  realIbgeData?: IbgeSocioData | null;
+53:  realIbgeData,
+82:          {(!isRealOnly || (geoSignals?.polygons && geoSignals.polygons.length > 0)) && (
+114:                {isRealOnly && (!geoSignals?.polygons || geoSignals.polygons.length === 0) && (
