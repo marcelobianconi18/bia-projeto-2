@@ -1,0 +1,7 @@
+{
+  "name": "BIA - Bianconi Intelligence for Ads",
+  "description": "A geomarketing intelligence platform using AI to optimize paid traffic campaigns through spatial data analysis.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
