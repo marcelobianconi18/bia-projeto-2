@@ -126,10 +126,11 @@ export const MetaCommandCenter: React.FC<MetaCommandCenterProps> = ({
                   </button>
                </div>
 
-               <div className={`p-5 rounded-2xl border-2 flex flex-col gap-3 transition-all ${targetingDNA.advantage.includes('ON') ? 'bg-green-500/5 border-green-500/30' : 'bg-orange-500/5 border-orange-500/30'}`}>
+
+               <div className={`p-5 rounded-2xl border-2 flex flex-col gap-3 transition-all ${(targetingDNA.advantage || '').includes('ON') ? 'bg-green-500/5 border-green-500/30' : 'bg-orange-500/5 border-orange-500/30'}`}>
                   <div className="flex items-center justify-between">
                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Meta Advantage+</span>
-                     <span className={`text-[10px] font-black px-3 py-1 rounded-full ${targetingDNA.advantage.includes('ON') ? 'bg-green-600 text-white' : 'bg-orange-600 text-white'}`}>
+                     <span className={`text-[10px] font-black px-3 py-1 rounded-full ${(targetingDNA.advantage || '').includes('ON') ? 'bg-green-600 text-white' : 'bg-orange-600 text-white'}`}>
                         {targetingDNA.advantage}
                      </span>
                   </div>

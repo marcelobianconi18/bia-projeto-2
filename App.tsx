@@ -1,6 +1,15 @@
 
 import React, { useState, useMemo, useEffect, Suspense } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppStep, BriefingData, GeminiAnalysis, MapSettings, DashboardView, RichLocationData } from './types';
+
+// ... (lines 4-165 unchanged)
+
+<div className="flex-1 relative h-full">
+  <ErrorBoundary>
+    {renderDashboardView()}
+  </ErrorBoundary>
+</div>
 import { BriefingWizard } from './components/BriefingWizard';
 // Lazy load heavy components
 const ExplorerPage = React.lazy(() => import('./components/ExplorerPage').then(module => ({ default: module.ExplorerPage })));
