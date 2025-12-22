@@ -16,6 +16,7 @@ export interface IbgeSocioData {
   provenance?: DataProvenance;
 }
 
+
 export type DataProvenanceLabel = 'REAL' | 'ESTIMATED' | 'SIMULATED';
 
 export interface DataProvenance {
@@ -31,11 +32,11 @@ export interface MapSettings {
   showIncome: boolean;
   showLogistics: boolean;
   showCompetitors: boolean;
-  liveTime: number; 
-  radius: number; 
+  liveTime: number;
+  radius: number;
   zoom: number;
-  minScore: number; 
-  selectedPersona: string; 
+  minScore: number;
+  selectedPersona: string;
   hideNoise?: boolean;
 }
 
@@ -60,19 +61,19 @@ export interface TacticalGeoJson {
 }
 
 export interface RichLocationData {
-  id: string;          
-  shortName: string;   
-  fullName: string;    
-  hierarchy: {         
-    municipality: string; 
-    state: string;        
-    region?: string;      
+  id: string;
+  shortName: string;
+  fullName: string;
+  hierarchy: {
+    municipality: string;
+    state: string;
+    region?: string;
   };
-  coords: {            
+  coords: {
     lat: number;
     lng: number;
   };
-  rawAddressDetails?: any; 
+  rawAddressDetails?: any;
   ibgeData?: IbgeSocioData;
   provenance?: DataProvenance;
 }
@@ -87,8 +88,8 @@ export interface BriefingData {
   targetGender: string;
   targetAge: string[];
   geography: {
-    city: string; 
-    selectedItems: RichLocationData[]; 
+    city: string;
+    selectedItems: RichLocationData[];
     level: 'city' | 'state' | 'country';
     lat?: number;
     lng?: number;

@@ -23,6 +23,7 @@ import { BriefingData, GeminiAnalysis, MapSettings } from '../types';
 import buildTargetingDNA from '../services/targetingDNA';
 import { PulseGraphWidget } from './PulseGraphWidget';
 import { ProvenanceBadge } from './ProvenanceBadge';
+import { ExplainabilityCard } from './ExplainabilityCard';
 import L from 'leaflet';
 
 interface MetaCommandCenterProps {
@@ -112,7 +113,11 @@ export const MetaCommandCenter: React.FC<MetaCommandCenterProps> = ({
                      <div className="mb-2"><strong>KPIs:</strong> {Array.isArray(targetingDNA.kpis) ? targetingDNA.kpis.join(', ') : targetingDNA.kpis}</div>
                      <div className="mb-2"><strong>Audiences:</strong> {targetingDNA.audiences?.slice(0, 3).join(' • ')}</div>
                   </div>
+
                </div>
+
+               {analysis && <ExplainabilityCard analysis={analysis} />}
+
                <div className="bg-black/40 p-5 rounded-2xl border border-white/10 relative group hover:border-[#39ff14]/30 transition-all">
                   <span className="text-[9px] text-slate-500 uppercase font-black tracking-widest block mb-2">Interesses Macro (Meta Compliance)</span>
                   <p className="text-[12px] font-bold text-slate-100 leading-relaxed italic pr-8">"{targetingDNA.interests}"</p>
@@ -234,7 +239,10 @@ export const MetaCommandCenter: React.FC<MetaCommandCenterProps> = ({
                         </span>
                         <div>
                            <p className={`text-[12px] font-black uppercase truncate max-w-[120px] tracking-tight ${selectedHotspot?.id === spot.id ? 'text-white' : 'text-slate-200'}`}>{spot.name}</p>
-                           <p className={`text-[9px] font-black uppercase tracking-widest ${selectedHotspot?.id === spot.id ? 'text-orange-200' : 'text-slate-600'}`}>Score: {spot.score}%</p>
+                           <div className="flex items-center gap-2">
+                              <p className={`text-[9px] font-black uppercase tracking-widest ${selectedHotspot?.id === spot.id ? 'text-orange-200' : 'text-slate-600'}`}>Score: {spot.score}%</p>
+                              {spot.provenance && <ProvenanceBadge provenance={spot.provenance} />}
+                           </div>
                         </div>
                      </div>
                      <ChevronRight size={16} className={selectedHotspot?.id === spot.id ? 'text-white translate-x-1' : 'text-slate-700'} />
