@@ -14,16 +14,50 @@ export interface HotspotResult {
     provenance: Provenance;
 }
 
-export function generateHotspots(
+export async function generateHotspots(
     briefing: BriefingInteligente,
     center: [number, number],
     isRealOnly: boolean
-): HotspotResult[] {
+): Promise<HotspotResult[]> {
+
+    // If a Supabase Edge Function URL is configured, prefer that live query
+    const edgeUrl = (typeof process !== 'undefined' && process.env.SUPABASE_EDGE_HOTSPOTS_URL)
+        || (typeof (import.meta) !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_EDGE_HOTSPOTS_URL)
+        || null;
+
+    if (edgeUrl) {
+        try {
+            const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timeout = 5000;
+            const timer = controller ? setTimeout(() => controller.abort(), timeout) : null;
+
+            const res = await fetch(edgeUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ briefing, center, isRealOnly }),
+                signal: controller ? controller.signal : undefined
+            });
+
+            if (timer) clearTimeout(timer);
+
+            if (res.ok) {
+                const payload = await res.json();
+                if (Array.isArray(payload)) return payload as HotspotResult[];
+                if (Array.isArray(payload.hotspots)) return payload.hotspots as HotspotResult[];
+                // sometimes payload.hotspots is nested
+                if (payload && payload.data && Array.isArray(payload.data.hotspots)) return payload.data.hotspots as HotspotResult[];
+            } else {
+                console.warn('Edge hotspots returned non-ok status', res.status);
+            }
+        } catch (e) {
+            // AbortError is expected on timeout; keep fallback deterministic
+            console.warn('Supabase Edge hotspots call failed or timed out, falling back to local heuristics', e?.name || e?.message || e);
+        }
+    }
 
     // REAL_ONLY: never return an empty list. Prefer deterministic census-based fallback.
     if (isRealOnly) {
         console.warn("MODO REAL: Buscando dados de infraestrutura base (IBGE/Censo) fallback...");
-        // Minimal, honest fallback based on census (not live POI). This prevents empty UI.
         return [
             {
                 id: 101,
