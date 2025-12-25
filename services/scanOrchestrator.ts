@@ -9,13 +9,15 @@
 // The lint error says: types.ts expects [string, string, string, string] but getting number[]
 // I will update types.ts to expect numbers for bounds.
 
-import { ScanResult, BriefingInteligente, BriefingData, ConnectorResult } from "../types";
+import { ScanResult, BriefingInteligente, BriefingData, ConnectorResult, IbgeOverlayBundle } from "../types";
 import { geocodeCity } from "./connectors/osmGeocode";
 import { verifyGoogleAds } from "./connectors/googleAdsConnector";
 import { verifyMetaAds } from "./connectors/metaAdsConnector";
 import { verifyRfb } from "./connectors/rfbConnector";
 import { fetchIbgeGeocode, fetchRealIbgeData } from "./ibgeService";
-import { buildGeoSignals } from "./geoSignalsService";
+import { buildGeoSignalsWithOverlays } from "./geoSignalsService";
+import { fetchIbgeSectors } from "./connectors/ibgeSectorsConnector";
+import { fetchIbgeAdmin } from "./connectors/ibgeAdminConnector";
 
 const FALLBACK_RESULT: ConnectorResult<any> = {
     status: 'UNAVAILABLE',
@@ -44,7 +46,7 @@ export const runBriefingScan = async (briefingData: BriefingInteligente): Promis
     }
 
     // 2. IBGE Data
-    let ibge = { status: 'NOT_CONFIGURED', provenance: 'NOT_CONFIGURED', data: null } as any;
+    let ibge = { status: 'NOT_CONFIGURED', provenance: 'UNAVAILABLE', data: null } as any;
 
     // Phase 2: Simple Resolver for key cities or STUB
     // In real implementation we would have a full database or API lookup for "City Name -> Code"
@@ -92,53 +94,158 @@ export const runBriefingScan = async (briefingData: BriefingInteligente): Promis
         verifyRfb(rfbConfig)
     ]);
 
-    // 4. GeoSignals (Optional Phase 1.5)
-    // We try to pass a known geocode for SP/Rio or skip
-    let geoSignals = undefined;
-    // TODO: Implement proper IBGE Code lookup in Phase 3
-    if (city.includes("São Paulo") || city.includes("Sao Paulo")) {
+    // 4. IBGE Admin Layers (states/municipios)
+    let adminStates: any | null = null;
+    let adminMunicipios: any | null = null;
+    try {
+        [adminStates, adminMunicipios] = await Promise.all([
+            fetchIbgeAdmin('state'),
+            fetchIbgeAdmin('municipio')
+        ]);
+    } catch (err) {
+        console.warn("IBGE admin fetch failed", err);
+    }
+
+    // 5. IBGE Sectors (optional, when cached locally)
+    let ibgeSectorsBundle: IbgeOverlayBundle | null = null;
+    let ibgeSectors: ConnectorResult<IbgeOverlayBundle> | undefined = undefined;
+    if (ibgeCode) {
         try {
-            // Construct BriefingData mock
-            const briefingMock: BriefingData = {
-                // id: "B-MOCK-1", // Not in Interface
-                objective: null,
-                geography: {
-                    municipioId: "3550308",
-                    city: "São Paulo",
-                    state: ["SP"],
-                    country: "BR",
-                    level: "City", // Correct enum case
-                    selectedItems: []
-                },
-                dataSources: {
-                    ibge: { connected: true },
-                    osm: { connected: true }, // Added if required by types, assuming OSM is in types
-                    googleAds: { connected: false },
-                    metaAds: { connected: false },
-                    rfb: { connected: false }
-                },
-                // Required by BriefingInteligente base
-                productDescription: "Mock Product",
-                contactMethod: "WhatsApp",
-                usageDescription: "Daily",
-                operationalModel: "Digital",
-                marketPositioning: "Premium",
-                targetGender: "Mixed",
-                targetAge: ["25-34"]
+            ibgeSectorsBundle = await fetchIbgeSectors(ibgeCode);
+        } catch (err) {
+            console.warn("IBGE sectors fetch failed", err);
+        }
+        if (ibgeSectorsBundle) {
+            ibgeSectors = { status: 'SUCCESS', provenance: 'REAL', data: ibgeSectorsBundle };
+        } else {
+            ibgeSectors = { status: 'UNAVAILABLE', provenance: 'UNAVAILABLE', data: null, notes: 'Setores IBGE indisponíveis.' };
+        }
+    } else {
+        ibgeSectors = { status: 'NOT_CONFIGURED', provenance: 'UNAVAILABLE', data: null, notes: 'Município IBGE não resolvido.' };
+    }
+
+    // 6. GeoSignals (Polygons/Hotspots/Flows)
+    let geoSignals = undefined;
+    let briefingForSignals: BriefingData | undefined = undefined;
+    try {
+        briefingForSignals = {
+            ...briefingData,
+            geography: {
+                ...briefingData.geography,
+                municipioId: ibgeCode,
+                lat: geocodeResult.data.lat,
+                lng: geocodeResult.data.lng,
+                state: briefingData.geography.state || [],
+                country: briefingData.geography.country || 'BR',
+                level: briefingData.geography.level || 'City',
+                selectedItems: []
+            }
+        } as BriefingData;
+        geoSignals = await buildGeoSignalsWithOverlays(briefingForSignals, {
+            ibgeSectors: ibgeSectorsBundle,
+            adminStates,
+            adminMunicipios
+        });
+    } catch (e) { }
+
+    // 7. If Meta Ads connector is verified as available, attempt to fetch Meta Hotspots
+    try {
+        if (metaAds && metaAds.status === 'SUCCESS') {
+            // Lazy import to avoid cycles
+            const { fetchMetaHotspots } = await import('./metaHotspotsService');
+            const scope = { kind: briefingData.geography.level?.toUpperCase?.() || 'CITY', city: briefingData.geography.city };
+            const metaResp = await fetchMetaHotspots(briefingForSignals, scope, 20);
+            if (metaResp && Array.isArray(metaResp.hotspots) && metaResp.hotspots.length > 0) {
+                // Map to GeoSignalHotspot shape and prefer these hotspots over derived ones
+                const mapped = metaResp.hotspots.map((h: any, idx: number) => ({
+                    id: h.id || `meta_${idx+1}`,
+                    point: { lat: h.lat, lng: h.lng },
+                    properties: {
+                        id: h.id || `meta_${idx+1}`,
+                        kind: 'HIGH_INTENT',
+                        rank: h.rank || (idx+1),
+                        name: h.name || `Hotspot ${idx+1}`,
+                        score: typeof h.score === 'number' ? h.score : null,
+                        targetAudienceEstimate: h.metrics?.audience ?? null
+                    },
+                    provenance: h.provenance || { label: 'DERIVED', source: 'META_ADS', method: 'reach_estimate' },
+                    lat: h.lat,
+                    lng: h.lng,
+                    label: h.name
+                }));
+
+                if (!geoSignals) geoSignals = { version: '1.0', createdAt: new Date().toISOString(), realOnly: false, briefing: { primaryCity: briefingForSignals.geography.city }, polygons: [], hotspots: mapped, flows: [], timeseries168h: [], warnings: [] } as any;
+                else geoSignals.hotspots = mapped;
+            }
+        }
+    } catch (err) {
+        console.warn('Meta hotspots fetch failed', err);
+    }
+
+    // If no hotspots were produced, create a graceful fallback using IBGE sectors centroids
+    try {
+        if (!geoSignals) geoSignals = { version: '1.0', createdAt: new Date().toISOString(), realOnly: false, briefing: { primaryCity: briefingForSignals?.geography.city || '' }, polygons: [], hotspots: [], flows: [], timeseries168h: [], warnings: [] } as any;
+
+        const existingHotspots = Array.isArray(geoSignals.hotspots) ? geoSignals.hotspots : [];
+        if (existingHotspots.length === 0) {
+            const fallback: any[] = [];
+            const sectors = ibgeSectorsBundle?.sectors?.features || [];
+            // helper centroid
+            const centroid = (geometry: any): [number, number] | null => {
+                if (!geometry) return null;
+                const coords = geometry.type === 'Polygon' ? geometry.coordinates?.[0] : geometry.type === 'MultiPolygon' ? geometry.coordinates?.[0]?.[0] : null;
+                if (!coords || !Array.isArray(coords) || coords.length === 0) return null;
+                let sumX = 0, sumY = 0;
+                coords.forEach((pt: any) => { sumX += pt[0]; sumY += pt[1]; });
+                const n = coords.length || 1;
+                return [sumY / n, sumX / n];
             };
 
-            geoSignals = await buildGeoSignals(briefingMock);
+            if (sectors.length > 0) {
+                // pick top 5 sectors by available population property
+                const scored = sectors.map((f: any, idx: number) => {
+                    const props = f.properties || {};
+                    const pop = Number(props?.V001 || props?.POP || props?.POPULACAO || props?.population || 0) || 0;
+                    return { f, pop, idx };
+                }).sort((a: any, b: any) => b.pop - a.pop).slice(0, 5);
 
-        } catch (e) { }
+                scored.forEach((item: any, i: number) => {
+                    const c = centroid(item.f.geometry) || [briefingForSignals!.geography.lat, briefingForSignals!.geography.lng];
+                    fallback.push({
+                        id: `fallback_${i + 1}`,
+                        point: { lat: c[0], lng: c[1] },
+                        properties: { id: `fallback_${i + 1}`, kind: 'HIGH_INTENT', rank: i + 1, name: `Área Adjacente ${i + 1}`, score: 50 },
+                        provenance: { label: 'DERIVED', source: 'IBGE_SECTORS_FALLBACK', method: 'adjacent_sector_expand' },
+                        lat: c[0],
+                        lng: c[1],
+                        label: `Área Adjacente ${i + 1}`
+                    });
+                });
+            }
+
+            if (fallback.length === 0) {
+                // last resort: synthetic single hotspot near center
+                const lat = briefingForSignals?.geography.lat || geocodeResult.data.lat;
+                const lng = briefingForSignals?.geography.lng || geocodeResult.data.lng;
+                fallback.push({ id: 'fallback_center_1', point: { lat: lat + 0.002, lng: lng + 0.002 }, properties: { id: 'fallback_center_1', kind: 'HIGH_INTENT', rank: 1, name: 'Zona Adjacente (Fallback)', score: 45 }, provenance: { label: 'DERIVED', source: 'FALLBACK', method: 'center_expand' }, lat: lat + 0.002, lng: lng + 0.002, label: 'Zona Adjacente (Fallback)' });
+            }
+
+            geoSignals.hotspots = fallback;
+            geoSignals.warnings = (geoSignals.warnings || []).concat(["Nenhum hotspot de alta probabilidade detectado nesta área exata. Expandindo raio de busca para zonas adjacentes..."]);
+        }
+    } catch (e) {
+        console.warn('Fallback hotspots generation failed', e);
     }
 
     return {
         timestamp,
         geocode: geocodeResult,
         ibge,
+        ibgeCode,
         places: googleAds, // Map GoogleAds Config Result to 'places' slot to satisfy ScanResult type for now
         metaAds,
         rfb,
+        ibgeSectors,
         geoSignals
     };
 };

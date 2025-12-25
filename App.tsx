@@ -48,6 +48,24 @@ const App: React.FC = () => {
   const hotspots = useMemo(() => {
     if (isRealOnly) return []; // REAL_ONLY: sem hotspots simulados
 
+    const geoHotspots = scanResult?.geoSignals?.hotspots;
+    if (geoHotspots && geoHotspots.length > 0) {
+      return geoHotspots
+        .filter((h) => h && (typeof h.lat === 'number' || typeof h.point?.lat === 'number'))
+        .map((h: any, idx: number) => ({
+          id: h.id || String(idx + 1),
+          point: h.point,
+          properties: h.properties,
+          provenance: h.provenance,
+          lat: h.lat ?? h.point?.lat,
+          lng: h.lng ?? h.point?.lng,
+          label: h.label || h.properties?.name || `Hotspot ${idx + 1}`,
+          rank: h.properties?.rank ?? idx + 1,
+          name: h.properties?.name || h.label || `Hotspot ${idx + 1}`,
+          score: h.properties?.score ?? 0
+        }));
+    }
+
     if (!briefingData || !briefingData.geography || outOfJurisdiction) return [];
 
     const lat = briefingData.geography.lat || mapCenter[0];
@@ -83,7 +101,7 @@ const App: React.FC = () => {
         label: `${cityLabel.toUpperCase()} - CLUSTER ${i + 1}`
       };
     }).filter(h => h !== null) as any[]; // Cast to avoid complex type match with strict filtering
-  }, [briefingData, mapCenter, outOfJurisdiction, isRealOnly]);
+  }, [briefingData, mapCenter, outOfJurisdiction, isRealOnly, scanResult]);
 
   const handleBriefingComplete = async (data: BriefingInteligente) => {
     setRawBriefing(data);
@@ -91,8 +109,16 @@ const App: React.FC = () => {
     setLoadingStatus("Iniciando Scan Real...");
 
     try {
-      // 1. Run Orchestrator
-      const scan = await runBriefingScan(data);
+      // Start orchestrator and ensure a minimum UX delay with staged messages
+      setLoadingStatus("Consultando Base IBGE...");
+      const scanPromise = runBriefingScan(data);
+      // staging messages
+      setTimeout(() => setLoadingStatus("Triangulando dados de Renda..."), 800);
+      setTimeout(() => setLoadingStatus("Calculando Hotspots..."), 1600);
+
+      // Ensure minimum wait of ~2500ms so users see the 'work' happening (Labor Illusion)
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const [scan] = await Promise.all([scanPromise, sleep(2500)]);
       setScanResult(scan);
 
       // 2. Validate Geocode
@@ -123,9 +149,11 @@ const App: React.FC = () => {
             country: data.geography.country || 'BR',
             lat, lng,
             level: data.geography.level,
-            selectedItems: []
+            selectedItems: [],
+            municipioId: scan.ibgeCode
           },
-          objective: data.objective || null
+          objective: data.objective || null,
+          geoSignals: scan.geoSignals
         };
         setBriefingData(legacyData);
         setView(AppStep.DASHBOARD);
@@ -151,6 +179,7 @@ const App: React.FC = () => {
           country: data.geography.country || 'BR',
           lat, lng,
           level: data.geography.level,
+          municipioId: scan.ibgeCode,
           selectedItems: [{
             id: 'MainLocation',
             shortName: data.geography.city.split(',')[0],
@@ -171,7 +200,8 @@ const App: React.FC = () => {
             } : undefined
           }]
         },
-        objective: data.objective || null
+        objective: data.objective || null,
+        geoSignals: scan.geoSignals
       };
 
       setBriefingData(legacyData);
