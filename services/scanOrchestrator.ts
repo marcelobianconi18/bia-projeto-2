@@ -14,7 +14,7 @@ import { geocodeCity } from "./connectors/osmGeocode";
 import { verifyGoogleAds } from "./connectors/googleAdsConnector";
 import { verifyMetaAds } from "./connectors/metaAdsConnector";
 import { verifyRfb } from "./connectors/rfbConnector";
-import { fetchRealIbgeData } from "./ibgeService";
+import { fetchIbgeGeocode, fetchRealIbgeData } from "./ibgeService";
 import { buildGeoSignals } from "./geoSignalsService";
 
 const FALLBACK_RESULT: ConnectorResult<any> = {
@@ -55,7 +55,18 @@ export const runBriefingScan = async (briefingData: BriefingInteligente): Promis
         "Curitiba": "4106902"
     };
     const cityName = city.split(',')[0].trim();
-    const ibgeCode = knownCodes[cityName];
+    const stateFromInput = city.includes(',') ? city.split(',')[1].trim() : '';
+    const stateFallback = briefingData.geography.state?.[0] || '';
+    const state = stateFromInput || stateFallback;
+    let ibgeCode = knownCodes[cityName];
+
+    if (!ibgeCode && state) {
+        try {
+            ibgeCode = await fetchIbgeGeocode(cityName, state) || undefined;
+        } catch (err) {
+            console.error("IBGE Geocode lookup failed", err);
+        }
+    }
 
     if (ibgeCode) {
         try {
@@ -65,7 +76,9 @@ export const runBriefingScan = async (briefingData: BriefingInteligente): Promis
         }
     } else {
         // If we don't have the code, we can't fetch real IBGE data from SIDRA easily without it.
-        ibge.notes = "IBGE Code lookup not implemented for this city in Phase 2 Stub.";
+        ibge.notes = state
+            ? "IBGE Code lookup failed for this city."
+            : "IBGE Code lookup requires UF (ex: 'Curitiba, PR').";
     }
 
     // 3. Connectors (Google, Meta, RFB)

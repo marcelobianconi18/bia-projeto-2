@@ -9,12 +9,6 @@ import shadow from 'leaflet/dist/images/marker-shadow.png';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: icon2x.indexOf('http') === 0 ? icon2x : undefined, // Vite handles imports as URLs usually, but let's be safe or just use the import
-  iconUrl: icon,
-  shadowUrl: shadow,
-});
-// Vite asset handling returns string URLs for image imports
-L.Icon.Default.mergeOptions({
   iconRetinaUrl: icon2x,
   iconUrl: icon,
   shadowUrl: shadow,

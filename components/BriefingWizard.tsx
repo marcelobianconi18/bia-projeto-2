@@ -107,7 +107,10 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
       case 4: return !!data.marketPositioning;
       case 5: return !!data.targetGender;
       case 6: return data.targetAge.length > 0;
-      case 7: return data.geography.city.length > 3 && (!!data.geography.lat || !!data.geography.municipioId || data.geography.selectedItems.length > 0);
+      case 7: {
+        const hasCoords = !!data.geography.coords || (typeof data.geography.lat === 'number' && typeof data.geography.lng === 'number');
+        return data.geography.city.length > 3 && (hasCoords || !!data.geography.municipioId || data.geography.selectedItems.length > 0);
+      }
       case 8: return !!data.objective;
       default: return true;
     }
@@ -127,6 +130,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
         geography: {
           ...prev.geography,
           city: res.data!.displayName,
+          coords: { lat: res.data!.lat, lng: res.data!.lng },
           lat: res.data!.lat,
           lng: res.data!.lng,
           selectedItems: [{
@@ -140,7 +144,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
       }));
     } else {
       setGeoError('Cidade não encontrada. Tente "Cidade, UF"');
-      setData(prev => ({ ...prev, geography: { ...prev.geography, lat: undefined, lng: undefined } }));
+      setData(prev => ({ ...prev, geography: { ...prev.geography, coords: undefined, lat: undefined, lng: undefined } }));
     }
     setIsGeocoding(false);
   };
@@ -179,7 +183,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
                 { id: 'Investor', label: 'Investidor' }, { id: 'Digital', label: '100% Digital' }
               ].map(opt => (
                 <button key={opt.id} onClick={() => update('operationalModel', opt.id)}
-                  className={`p - 4 rounded border text - xs font - bold uppercase transition - all ${data.operationalModel === opt.id ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'} `}>
+                  className={`p-4 rounded border text-xs font-bold uppercase transition-all ${data.operationalModel === opt.id ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'} `}>
                   {opt.label}
                 </button>
               ))}
@@ -233,7 +237,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
               </div>
 
               {/* Meta Ads */}
-              <div className={`p - 4 rounded border transition - all ${data.dataSources.metaAds.connected ? 'bg-purple-900/20 border-purple-500' : 'bg-slate-800 border-slate-700'} `}>
+              <div className={`p-4 rounded border transition-all ${data.dataSources.metaAds.connected ? 'bg-purple-900/20 border-purple-500' : 'bg-slate-800 border-slate-700'} `}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="flex items-center gap-2 text-xs font-bold uppercase text-white"><Layers size={16} /> Meta Ads</span>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -254,7 +258,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
               </div>
 
               {/* RFB */}
-              <div className={`p - 4 rounded border transition - all ${data.dataSources.rfb.connected ? 'bg-purple-900/20 border-purple-500' : 'bg-slate-800 border-slate-700'} `}>
+              <div className={`p-4 rounded border transition-all ${data.dataSources.rfb.connected ? 'bg-purple-900/20 border-purple-500' : 'bg-slate-800 border-slate-700'} `}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="flex items-center gap-2 text-xs font-bold uppercase text-white"><ShieldCheck size={16} /> Receita Federal</span>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -290,7 +294,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
             <div className="grid grid-cols-1 gap-3">
               {[{ id: 'Popular', icon: Users }, { id: 'CostBenefit', icon: Coins }, { id: 'Premium', icon: Gem }, { id: 'Luxury', icon: GraduationCap }].map(opt => (
                 <button key={opt.id} onClick={() => update('marketPositioning', opt.id)}
-                  className={`p - 4 rounded border flex items - center gap - 4 transition - all ${data.marketPositioning === opt.id ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'} `}>
+                  className={`p-4 rounded border flex items-center gap-4 transition-all ${data.marketPositioning === opt.id ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'} `}>
                   <opt.icon size={20} /> <span className="text-xs font-bold uppercase">{opt.id}</span>
                 </button>
               ))}
@@ -304,7 +308,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
             <div className="flex gap-3">
               {[{ id: 'Female', label: 'Feminino' }, { id: 'Male', label: 'Masculino' }, { id: 'Mixed', label: 'Misto' }].map(opt => (
                 <button key={opt.id} onClick={() => update('targetGender', opt.id)}
-                  className={`flex - 1 p - 6 rounded border flex flex - col items - center gap - 2 transition - all ${data.targetGender === opt.id ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'} `}>
+                  className={`flex-1 p-6 rounded border flex flex-col items-center gap-2 transition-all ${data.targetGender === opt.id ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'} `}>
                   <span className="text-xs font-black uppercase">{opt.label}</span>
                 </button>
               ))}
@@ -318,7 +322,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
             <div className="grid grid-cols-2 gap-3">
               {['18-24', '25-34', '35-44', '45-54', '55-64', '65+'].map(age => (
                 <button key={age} onClick={() => toggleArray('targetAge', age, 3)}
-                  className={`p - 4 rounded border text - xs font - black transition - all ${data.targetAge.includes(age as any) ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'} `}>
+                  className={`p-4 rounded border text-xs font-black transition-all ${data.targetAge.includes(age as any) ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'} `}>
                   {age}
                 </button>
               ))}
@@ -332,9 +336,12 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
             <div className="space-y-2">
               <label className="text-[10px] uppercase font-bold text-slate-400">Cidade Alvo</label>
               <div className="flex gap-2">
-                <input className={`flex - 1 bg - slate - 800 border ${geoError ? 'border-red-500' : 'border-slate-700'} rounded p - 3 text - sm text - white`}
+                <input className={`flex-1 bg-slate-800 border ${geoError ? 'border-red-500' : 'border-slate-700'} rounded p-3 text-sm text-white`}
                   value={data.geography.city}
-                  onChange={e => setData(prev => ({ ...prev, geography: { ...prev.geography, city: e.target.value, coords: undefined } }))}
+                  onChange={e => setData(prev => ({
+                    ...prev,
+                    geography: { ...prev.geography, city: e.target.value, coords: undefined, lat: undefined, lng: undefined }
+                  }))}
                   onKeyDown={e => e.key === 'Enter' && handleGeocode()}
                   placeholder="Ex: Curitiba, PR" />
                 <button onClick={handleGeocode} disabled={isGeocoding} className="bg-purple-600 px-4 rounded text-white">
@@ -342,7 +349,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
                 </button>
               </div>
               {geoError && <p className="text-xs text-red-400">{geoError}</p>}
-              {data.geography.coords && ( // Keep legacy coords check or switch to lat/lng
+              {data.geography.coords && (
                 <div className="p-3 bg-green-900/20 border border-green-500/30 rounded flex items-center gap-2 text-green-400 text-xs">
                   <CheckCircle size={16} /> Localização confirmada: {data.geography.city}
                 </div>
@@ -360,7 +367,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
                 { id: 'FindSpot', label: 'Encontrar Ponto' }, { id: 'ValidateIdea', label: 'Validar Ideia' }
               ].map(opt => (
                 <button key={opt.id} onClick={() => update('objective', opt.id)}
-                  className={`p - 5 rounded border text - left transition - all ${data.objective === opt.id ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'} `}>
+                  className={`p-5 rounded border text-left transition-all ${data.objective === opt.id ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'} `}>
                   <span className="text-sm font-bold uppercase">{opt.label}</span>
                 </button>
               ))}

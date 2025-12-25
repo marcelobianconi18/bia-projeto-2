@@ -11,7 +11,7 @@ export type DashboardView = 'COCKPIT' | 'EXPLORER' | 'COMMAND_CENTER';
 // GEO SIGNALS — CORE TYPES (Canonical)
 // =========================
 
-export type DataLabel = "REAL" | "DERIVED" | "UNAVAILABLE";
+export type DataLabel = "REAL" | "PARTIAL_REAL" | "DERIVED" | "UNAVAILABLE";
 export type SourceSystem = "IBGE" | "OSM_NOMINATIM" | "OSM_OVERPASS" | "GOOGLE_ADS" | "GA4" | "SEARCH_CONSOLE" | "META_ADS" | "RFB" | "INTERNAL";
 
 export interface FetchAttempt {
@@ -66,6 +66,10 @@ export interface MapSettings {
   minScore: number;
   selectedPersona: string;
   hideNoise?: boolean;
+  showHeatmap?: boolean;
+  showIsochrone?: boolean;
+  showTacticalMesh?: boolean;
+  showHotspots?: boolean;
 }
 
 export interface TacticalFeature {
@@ -282,6 +286,9 @@ export interface IbgeSocioData {
   lastUpdate: string;
   geocode: string;
   provenance?: Provenance;
+  populationYear?: number;
+  income?: number | null;
+  incomeSource?: string;
 }
 
 export interface RichLocationData {

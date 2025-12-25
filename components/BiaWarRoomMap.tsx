@@ -39,9 +39,11 @@ interface BiaWarRoomMapProps {
   center: [number, number];
   zoom?: number;
   settings: {
-    showHeatmap: boolean;
+    showIncome: boolean;
+    showLogistics: boolean;
     showCompetitors: boolean;
-    showIsochrone: boolean;
+    showHeatmap?: boolean;
+    showIsochrone?: boolean;
     showTacticalMesh?: boolean;
     showHotspots?: boolean;
   };
@@ -72,7 +74,28 @@ export const BiaWarRoomMap: React.FC<BiaWarRoomMapProps> = ({
   const [meshData, setMeshData] = useState<TacticalGeoJson | null>(null);
   const [currentZoom, setCurrentZoom] = useState(zoom || 13);
 
-  // Cleanup: Removed simulated tactical mesh effect entirely as per Datlo-Style Real Data requirement.
+  const showMesh = settings.showTacticalMesh ?? settings.showIncome;
+
+  useEffect(() => {
+    if (isRealOnlyMode || !showMesh) {
+      setMeshData(null);
+      return;
+    }
+
+    let alive = true;
+    fetchTacticalMesh(center, cityName || "Região", realIbgeData || null)
+      .then((mesh) => {
+        if (alive) setMeshData(mesh);
+      })
+      .catch((err) => {
+        console.warn("Failed to load tactical mesh", err);
+        if (alive) setMeshData(null);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [center, cityName, isRealOnlyMode, realIbgeData, showMesh]);
 
   // Heatmap Layer Effect
   useEffect(() => {

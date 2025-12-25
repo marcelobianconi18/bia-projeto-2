@@ -199,7 +199,7 @@ Veredito: ${analysis?.verdict}
                 <div className="w-full h-full opacity-40 group-hover:opacity-100 transition duration-700">
                      <BiaWarRoomMap 
                         center={mapCenter}
-                        settings={{...mapSettings, showIncome: true, showLogistics: true}} 
+                        settings={mapSettings}
                         cityName={cityName}
                         realIbgeData={ibgeStats}
                      />

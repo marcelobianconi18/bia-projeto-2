@@ -5,8 +5,10 @@ import { safeParseJson } from "./geminiParsing";
 
 export const analyzeBriefing = async (data: BriefingData): Promise<GeminiAnalysis> => {
   try {
-    // Fix: Moved GoogleGenAI initialization inside the function to use the current API key from process.env.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const env = (import.meta as any)?.env || {};
+    const apiKey =
+      env.VITE_GEMINI_API_KEY ||
+      (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY || process.env.API_KEY : undefined);
 
     const prompt = `
       Você é a BIA (Bianconi Intelligence for Ads), especialista em Geomarketing e Copywriting Tático.
@@ -38,7 +40,10 @@ export const analyzeBriefing = async (data: BriefingData): Promise<GeminiAnalysi
 
     // Usando gemini-3-flash-preview para análise tática rápida e eficiente.
     // If an analysis endpoint is provided (optional proxy), prefer it to avoid exposing keys client-side
-    const endpoint = (process.env.ANALYSIS_ENDPOINT as string) || (process.env.VITE_ANALYSIS_ENDPOINT as string) || undefined;
+    const endpoint =
+      env.VITE_ANALYSIS_ENDPOINT ||
+      (typeof process !== 'undefined' ? process.env.ANALYSIS_ENDPOINT : undefined) ||
+      undefined;
     if (endpoint) {
       try {
         const res = await fetch(endpoint, {
@@ -55,6 +60,15 @@ export const analyzeBriefing = async (data: BriefingData): Promise<GeminiAnalysi
       }
     }
 
+    if (!apiKey) {
+      return {
+        verdict: "Chave Gemini ausente. Configure VITE_GEMINI_API_KEY ou use o proxy.",
+        action: "Defina a chave local ou aponte VITE_ANALYSIS_ENDPOINT para o servidor.",
+        score: 50
+      };
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,

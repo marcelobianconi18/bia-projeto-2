@@ -185,7 +185,7 @@ export async function fetchRealIbgeData(geocode: string): Promise<IbgeSocioData 
     // Adding extended metadata for UI to consume if needed
     populationYear: 2022,
     income: incomeRes.status === 'REAL' ? incomeRes.income : null // Explicito null para UI
-  } as any; // Cast as any because types.ts might need update for 'income' (it uses averageIncome usually)
+  };
 }
 
 export const fetchIbgeGeocode = async (municipalityName: string, stateUF: string): Promise<string | null> => {

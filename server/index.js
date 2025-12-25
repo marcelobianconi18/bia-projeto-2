@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
 
@@ -15,6 +16,91 @@ const port = 3001;
 
 app.use(cors());
 app.use(express.json());
+
+const buildPrompt = (data) => `
+Você é a BIA (Bianconi Intelligence for Ads), especialista em Geomarketing e Copywriting Tático.
+
+ANALISE O BRIEFING ESTRATÉGICO:
+1. Nicho + Diferencial: ${data.productDescription}
+2. Funil de Contato: ${data.contactMethod}
+3. Transformação/Emoção Pós-Compra: ${data.usageDescription}
+
+CONTEXTO OPERACIONAL:
+Modelo: ${data.operationalModel}
+Público: ${data.targetGender}, idades ${Array.isArray(data.targetAge) ? data.targetAge.join(', ') : ''}
+Posicionamento: ${data.marketPositioning}
+Local: ${data.geography?.city}
+Objetivo: ${data.objective}
+
+SUA MISSÃO:
+Baseado no Nicho, Funil e Transformação informados, gere um 'Veredito Tático' e um JSON de saída.
+
+SAÍDA (JSON estrito, SEM MARKDOWN):
+Campos obrigatórios: "verdict" (string), "action" (string), "score" (0-100 number).
+Campos opcionais: "confidence" (0-100), "reasons" (string[] - top 3), "risks" (string[] - top 2), "limitations" (string[]).
+
+EXEMPLO_DE_SAIDA:
+{ "verdict": "...", "action": "...", "score": 78, "confidence": 82, "reasons": ["A","B"], "risks": ["C"] }
+
+Observação: envie apenas o JSON, sem texto adicional.
+`;
+
+const safeParseJson = (text) => {
+    if (!text) return { ok: false };
+    const cleaned = String(text).replace(/```json|```/gi, '').trim();
+    const startIndex = Math.min(
+        ...['{', '['].map((ch) => {
+            const i = cleaned.indexOf(ch);
+            return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+        })
+    );
+    const fragment = startIndex === Number.MAX_SAFE_INTEGER ? cleaned : cleaned.slice(startIndex);
+    try {
+        return { ok: true, value: JSON.parse(fragment) };
+    } catch {
+        return { ok: false };
+    }
+};
+
+app.post('/api/analysis', async (req, res) => {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    if (!apiKey) {
+        return res.status(500).json({ error: 'Missing GEMINI_API_KEY' });
+    }
+
+    const briefing = req.body?.briefing;
+    if (!briefing) {
+        return res.status(400).json({ error: 'Missing briefing' });
+    }
+
+    try {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: buildPrompt(briefing),
+            config: { responseMimeType: 'application/json' }
+        });
+
+        const text = (response && response.text) || '{}';
+        const parsed = safeParseJson(text);
+        if (parsed.ok && parsed.value) return res.json(parsed.value);
+
+        return res.json({
+            verdict: "Resposta inválida do modelo. Revisão humana recomendada.",
+            action: "Revise o briefing e valide manualmente as zonas sugeridas.",
+            score: 50,
+            limitations: ["Model output was not valid JSON"]
+        });
+    } catch (err) {
+        console.error('Analysis endpoint failed', err);
+        return res.status(500).json({
+            verdict: "Erro no servidor de análise. Revisão humana recomendada.",
+            action: "Verifique o servidor e as credenciais do Gemini.",
+            score: 50,
+            limitations: ["Server error"]
+        });
+    }
+});
 
 // --- Stub Routes for Future Integrations (Canonical Format) ---
 
@@ -68,17 +154,17 @@ app.get('/api/rfb/cnpj', (req, res) => {
 
 // --- Phase 2: Connector Verify Stubs ---
 
-app.get('/api/connectors/google-ads/verify', (_, res) =>
-    res.status(501).json({ connector: 'google-ads', status: 'NOT_CONFIGURED', message: 'Missing config' })
-);
+const respondConnectorStub = (name) => (_req, res) =>
+    res.status(501).json({ connector: name, status: 'NOT_CONFIGURED', message: 'Missing config' });
 
-app.get('/api/connectors/meta-ads/verify', (_, res) =>
-    res.status(501).json({ connector: 'meta-ads', status: 'NOT_CONFIGURED', message: 'Missing config' })
-);
+app.get('/api/connectors/google-ads/verify', respondConnectorStub('google-ads'));
+app.post('/api/connectors/google-ads/verify', respondConnectorStub('google-ads'));
 
-app.get('/api/connectors/rfb/verify', (_, res) =>
-    res.status(501).json({ connector: 'rfb', status: 'NOT_CONFIGURED', message: 'Not implemented' })
-);
+app.get('/api/connectors/meta-ads/verify', respondConnectorStub('meta-ads'));
+app.post('/api/connectors/meta-ads/verify', respondConnectorStub('meta-ads'));
+
+app.get('/api/connectors/rfb/verify', respondConnectorStub('rfb'));
+app.post('/api/connectors/rfb/verify', respondConnectorStub('rfb'));
 
 app.get('/api/ga4/weekly-heatmap', (req, res) => {
     res.status(501).json({
@@ -200,7 +286,7 @@ app.get('/api/ibge/sectors', (req, res) => {
         return res.status(400).json({ error: 'Missing municipioId' });
     }
 
-    const filePath = path.join(__dirname, 'data', 'ibge', 'sectors', `${municipioId}.geojson`);
+    const filePath = join(__dirname, 'data', 'ibge', 'sectors', `${municipioId}.geojson`);
 
     if (fs.existsSync(filePath)) {
         res.setHeader('Content-Type', 'application/json');
