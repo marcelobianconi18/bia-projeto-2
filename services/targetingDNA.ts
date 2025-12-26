@@ -50,13 +50,38 @@ const objectivePack = (funnel?: "AWARENESS" | "CONSIDERATION" | "CONVERSION" | "
   }
 };
 
-export function buildTargetingDNA(briefing: BriefingData): TargetingDNA {
+// Adicionamos parâmetros novos para cumprir a Ordem 02 da AIMC
+export function buildTargetingDNA(
+  briefing: BriefingData, 
+  totalBudget: number = 0, // Novo Input: Orçamento Real
+  opportunityScore: number = 50 // Novo Input: Score da Rubrica (0-100)
+): TargetingDNA {
+  
   const logic = operationalLogic(briefing.operationalModel as any) ?? "RADIUS";
   const posId = briefing.marketPositioning as any | undefined;
   const pos = posTone(posId ? POSITIONING_META[posId]?.priceBias : undefined);
-
   const objId = briefing.objective as any | undefined;
   const obj = objectivePack(objId ? OBJECTIVE_META[objId]?.funnel : undefined);
+
+  // Lógica Financeira Dinâmica (Algoritmo de Alocação v1.1)
+  const calculateBudgetSplit = (strategyType: string): string => {
+    if (totalBudget === 0) return "Defina um orçamento para cálculo de alocação.";
+    
+    // Se o Score for alto (>75), somos mais agressivos em prospecção (Top Funnel)
+    // Se o Score for baixo (<50), somos conservadores e protegemos o caixa (Retargeting)
+    const confidenceMultiplier = opportunityScore / 100;
+    
+    let prospectShare = 0.70; // Base padrão
+    if (opportunityScore > 80) prospectShare = 0.80; // Ataque total
+    if (opportunityScore < 50) prospectShare = 0.50; // Defesa
+
+    const prospectBudget = (totalBudget * prospectShare).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const retargetBudget = (totalBudget * (1 - prospectShare)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    return `Orçamento Diário: ${prospectBudget} Prospecção / ${retargetBudget} Retargeting. (Score de Confiança: ${opportunityScore}%)`;
+  };
+
+  const currentBudgetHint = calculateBudgetSplit(logic);
 
   const ds = briefing.dataSources?.[0];
   const wantsDigital = ds === "DS_DIGITAL" || ds === "DS_CROSS";
@@ -75,7 +100,7 @@ export function buildTargetingDNA(briefing: BriefingData): TargetingDNA {
       case "NATIONAL_HEATMAP": {
         return {
           name: `Digital Nacional (${pos.valueProp})`,
-          geoStrategy: "Brasil (macro) → estados/cidades por performance; começar amplo e refinar por CPA/ROAS.",
+          geoStrategy: "Brasil (macro) → refinar por CPA.",
           campaignObjective: obj.obj,
           kpis: obj.kpis,
           audiences: [
@@ -97,22 +122,25 @@ export function buildTargetingDNA(briefing: BriefingData): TargetingDNA {
             ],
             ctas: [obj.cta, "Ver catálogo", "Enviar mensagem"],
           },
-          budgetHint: "70% prospecção / 30% retarget; consolidar conjuntos com maior volume.",
+          
+          // ATUALIZAÇÃO CRÍTICA:
+          budgetHint: currentBudgetHint, // Agora é dinâmico
+          
           notes: [
-            "Evite microsegmentação no início; deixe o algoritmo aprender.",
-            "Criativos diferentes por posicionamento (popular vs premium) mudam mais que interesses.",
+            "Evite microsegmentação no início.",
+            `Alocação ajustada para Score ${opportunityScore}: Foco em ${opportunityScore > 75 ? 'Escala' : 'Validação'}.`
           ],
-          interests: "Cultura Pop, Tecnologia, E-commerce, Viagens",
+          interests: "Cultura Pop, Tecnologia, E-commerce",
           advantage: "ON",
-          strategy: "Advantage+ Shopping / App Campaigns",
-          warning: "Cuidado com sobreposição de audiência em escala nacional"
+          strategy: "Advantage+ Shopping",
+          warning: "Cuidado com sobreposição em escala nacional"
         };
       }
 
       case "RADIUS": {
         return {
           name: `Local por Raio (${pos.valueProp})`,
-          geoStrategy: "Cidade → raio por unidade (testar 1km/3km/5km; ajustar por densidade).",
+          geoStrategy: "Raio por unidade (testar 1km/3km).",
           campaignObjective: obj.obj,
           kpis: obj.kpis,
           audiences: [
@@ -130,14 +158,14 @@ export function buildTargetingDNA(briefing: BriefingData): TargetingDNA {
             hooks: ["“A X minutos de você”", "“Hoje ainda” / “agende agora”", "“Últimas vagas/horários”"],
             ctas: [obj.cta, "Traçar rota", "Agendar"],
           },
-          budgetHint: "60% raio principal / 40% raio secundário; mover verba para o raio com melhor CPA/CPL.",
+          budgetHint: currentBudgetHint, // Dinâmico
           notes: [
-            wantsPhysical ? "Se possível, cruzar com sinais IBGE (renda/densidade) para priorizar bairros." : "Sem IBGE: priorize aprendizado por performance.",
+             "Cruzar com sinais IBGE de renda se disponível."
           ],
-          interests: "Negócios Locais, Comunidade, Eventos, Gastronomia",
+          interests: "Negócios Locais",
           advantage: "OFF",
-          strategy: "Controle manual de raio (sem expansão automática)",
-          warning: "Raio muito pequeno pode saturar rápido (alta frequência)"
+          strategy: "Controle manual",
+          warning: "Raio pequeno satura rápido"
         };
       }
 
@@ -161,7 +189,7 @@ export function buildTargetingDNA(briefing: BriefingData): TargetingDNA {
             hooks: ["“Precisa pra hoje?”", "“Chega rápido na sua região”", "“Sem taxa surpresa”"],
             ctas: [obj.cta, "Pedir agora", "Agendar visita"],
           },
-          budgetHint: "Distribuir 50/30/20 entre zonas (rápida/média/longa) e otimizar pela margem.",
+          budgetHint: currentBudgetHint, // Dinâmico
           notes: ["Se a operação tem limite real, não prometa prazos fora da área atendida."],
           interests: "Delivery, Conveniência, Serviços Express, Tempo Real",
           advantage: "OFF",
@@ -191,7 +219,7 @@ export function buildTargetingDNA(briefing: BriefingData): TargetingDNA {
             hooks: ["“Passando pelo [POI]?”", "“Pare 5 min e resolva isso”", "“Só hoje aqui perto”"],
             ctas: [obj.cta, "Ver localização", "Chamar agora"],
           },
-          budgetHint: "Criar 3–6 POIs principais; pausar os que não batem CTR + conversão após aprendizado.",
+          budgetHint: currentBudgetHint, // Dinâmico
           notes: [
             "Se shopping/âncora: mensagens e criativos precisam “parecer do lugar” (contextual).",
             "Se itinerante: rotas/horários devem estar claros na comunicação.",
@@ -225,7 +253,7 @@ export function buildTargetingDNA(briefing: BriefingData): TargetingDNA {
             hooks: ["“Chegamos em [região]”", "“Novo na sua cidade”", "“Veja como funciona em 30s”"],
             ctas: [obj.cta, "Quero na minha cidade", "Falar com consultor"],
           },
-          budgetHint: "80% teste (clusters) / 20% retarget; promover clusters vencedores após 7–14 dias.",
+          budgetHint: currentBudgetHint, // Dinâmico
           notes: ["Evite conclusões com poucos eventos; use janelas maiores e agregue municípios por cluster."],
           interests: "Investimentos, Imóveis, Carreira, Luxo",
           advantage: "ON",
@@ -246,7 +274,7 @@ export function buildTargetingDNA(briefing: BriefingData): TargetingDNA {
             hooks: ["“Em 30s você entende…”", "“O erro #1 que…”", "“Se você quer X…”"],
             ctas: [obj.cta],
           },
-          budgetHint: "70% prospecção / 30% retarget.",
+          budgetHint: currentBudgetHint, // Dinâmico
           notes: ["Fallback aplicado porque não foi possível inferir a lógica operacional."],
           interests: "Interesses Gerais",
           advantage: "ON",
@@ -257,7 +285,10 @@ export function buildTargetingDNA(briefing: BriefingData): TargetingDNA {
     }
   })();
 
-  return { ...defaults, ...result };
+  // Fallback seguro se result for undefined, embora o switch cubra tudo
+  if (!result) return defaults as any;
+
+  return { ...defaults, ...result, budgetHint: currentBudgetHint };
 }
 
 export default buildTargetingDNA;
