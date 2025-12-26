@@ -34,7 +34,13 @@ export async function verifyMetaStatus(): Promise<HealthReport> {
     // Teste: Buscar Heatmap Digital
     const [res, latency, err] = await measure(() => getWeeklyHeatmapDigital());
 
-    if (err) return { service: 'Meta Ads', status: 'ERROR', latencyMs: latency, message: err.message || 'Erro desconhecido', lastCheck: new Date().toISOString() };
+    if (err) {
+        // Se for erro 501 (Not Implemented/Not Configured), tratamos como SIMULADO
+        if (err.message?.includes('501') || err.message?.includes('Not Configured')) {
+            return { service: 'Meta Ads', status: 'SIMULATED', latencyMs: latency, message: 'API não configurada (Modo Simulado)', lastCheck: new Date().toISOString() };
+        }
+        return { service: 'Meta Ads', status: 'ERROR', latencyMs: latency, message: err.message || 'Erro desconhecido', lastCheck: new Date().toISOString() };
+    }
 
     // Análise de Provenance (Verdadeiro vs Simulado)
     const provenance = res?.provenance?.label || 'UNKNOWN';

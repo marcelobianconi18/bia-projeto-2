@@ -15,7 +15,7 @@ export const WeeklyHeatmapWidget: React.FC<Props> = ({ data }) => {
     const unavailable = !currentData || currentData.provenance.label === 'UNAVAILABLE';
 
     return (
-        <div className="bg-surface2 p-5 rounded-2xl flex flex-col h-full border border-app relative overflow-hidden">
+        <div className="min-h-[200px] bg-surface2 p-5 rounded-2xl flex flex-col h-full border border-app relative overflow-hidden">
 
             {/* Header */}
             <div className="flex justify-between items-start mb-4">

@@ -1,310 +1,366 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { MapContainer, TileLayer, Circle, useMap } from 'react-leaflet';
+import { Target, Users, DollarSign, Zap, Layers, AlertTriangle, CheckCircle2, CheckSquare, Square, Crosshair } from 'lucide-react';
+import { BriefingInteligente } from '../types';
+import { generateHotspots, HotspotResult } from '../services/hotspotsEngine';
+import { calculateAdForecasting, getThermalColor } from '../services/adMath';
+import { useTheme } from '../src/hooks/useTheme';
 
-import React, { useState, useMemo, Suspense, useEffect } from 'react';
-import {
-   Copy,
-   Target,
-   ShieldAlert,
-   Zap,
-   DollarSign,
-   ChevronRight,
-   Flame,
-   Users,
-   Maximize2,
-   Database,
-   ShieldCheck,
-   AlertTriangle,
-   Crosshair,
-   Info,
-   CheckCircle,
-   Scale
-} from 'lucide-react';
-const BiaWarRoomMap = React.lazy(() => import('./BiaWarRoomMap').then(m => ({ default: m.BiaWarRoomMap })));
-import { BriefingData, GeminiAnalysis, MapSettings } from '../types';
-import buildTargetingDNA from '../services/targetingDNA';
-import { PulseGraphWidget } from './PulseGraphWidget';
-import { ProvenanceBadge } from './ProvenanceBadge';
-import { ExplainabilityCard } from './ExplainabilityCard';
-import L from 'leaflet';
-import { MetaAdsPanel } from './metaAds/MetaAdsPanel';
+// --- TYPES & STATE MACHINE ---
+type MachineState = 'MACRO_COMMAND' | 'RADAR_SCAN' | 'DRILL_DOWN';
 
-interface MetaCommandCenterProps {
-   briefingData: BriefingData;
-   analysis: GeminiAnalysis | null;
-   mapSettings: MapSettings;
-   mapCenter: [number, number];
-   onCenterChange?: (coords: [number, number]) => void;
+interface Props {
+   briefingData: BriefingInteligente;
+   analysis?: any;
+   mapSettings?: any;
+   mapCenter?: [number, number];
+   onCenterChange?: (center: [number, number]) => void;
    hotspots?: any[];
 }
 
-export const MetaCommandCenter: React.FC<MetaCommandCenterProps> = ({
-   briefingData,
-   analysis,
-   mapSettings,
-   mapCenter,
-   onCenterChange,
-   hotspots = []
+// --- SUB-COMPONENT: FLY TO ANIMATION ---
+const MapFlyTo = ({ center, zoom }: { center: [number, number], zoom: number }) => {
+   const map = useMap();
+   useEffect(() => {
+      map.flyTo(center, zoom, { duration: 0.8 }); // 800ms conforme spec
+   }, [center, zoom, map]);
+   return null;
+};
+
+// --- SUB-COMPONENT: THERMAL CIRCLE (The Intelligent Geometry) ---
+const ThermalCircle = ({
+   spot,
+   isSelected,
+   isDimmed,
+   radius,
+   onClick
+}: {
+   spot: HotspotResult;
+   isSelected: boolean;
+   isDimmed: boolean;
+   radius: number;
+   onClick: () => void;
 }) => {
-   const [map, setMap] = useState<L.Map | null>(null);
-   const [selectedHotspot, setSelectedHotspot] = useState<any | null>(null);
-   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-   const cityName = briefingData.geography.city.split(',')[0] || "Região";
-
-   const handleCopy = (id: string, text: string) => {
-      navigator.clipboard.writeText(text);
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
-   };
-
-   const targetingDNA = useMemo(() => {
-      try {
-         // WIRING HARNESS: Connecting Real Data to Strategy Brain
-         const budget = briefingData.totalBudget || 5000; // Default to Simulation Scenario if not set
-         const score = analysis?.score || 50;
-         return buildTargetingDNA(briefingData as BriefingData, budget, score) as any;
-      } catch (e) {
-         console.warn('TargetingDNA generation failed, using fallback', e);
-         return {
-            name: 'Fallback DNA',
-            geoStrategy: 'Começar amplo e refinar',
-            campaignObjective: 'Performance',
-            kpis: ['ctr', 'cpm'],
-            audiences: ['Broad', 'Retarget 7/14/30d'],
-            creatives: { angles: [], hooks: [], ctas: [] },
-            budgetHint: '70/30',
-            notes: ['Fallback aplicado']
-         };
-      }
-   }, [briefingData.operationalModel]);
-
-   // Fix Map Layout on mount/update
-   useEffect(() => {
-      if (!map) return;
-      const t = setTimeout(() => map.invalidateSize(), 50);
-      return () => clearTimeout(t);
-   }, [map]);
-
-   useEffect(() => {
-      if (!map) return;
-      const t = setTimeout(() => map.invalidateSize(), 50);
-      return () => clearTimeout(t);
-   }, [selectedHotspot, mapCenter, map]);
+   const color = getThermalColor(spot.score || 0);
 
    return (
-      <div className="h-full w-full bg-app text-app p-4 font-mono flex gap-4 overflow-hidden select-none">
+      <Circle
+         center={[spot.lat, spot.lng]}
+         radius={isSelected ? radius : 1200} // 1.2km default ou dinâmico
+         pathOptions={{
+            color: color,
+            fillColor: color,
+            fillOpacity: isSelected ? 0.3 : (isDimmed ? 0.1 : 0.2), // Ghosting effect
+            weight: isSelected ? 3 : 1,
+            className: isDimmed && !isSelected ? 'transition-opacity duration-500 opacity-20' : 'transition-all duration-300'
+         }}
+         eventHandlers={{ click: onClick }}
+      />
+   );
+};
 
-         {/* SIDEBAR TÁTICA 2025 */}
-         <aside className="w-[340px] h-full flex flex-col gap-4 bg-surface2 p-6 rounded-[32px] border border-app backdrop-blur-2xl">
-            <div className="flex items-center justify-between border-b border-app pb-5">
-               <h2 className="text-[11px] font-black text-accent uppercase tracking-[0.2em] flex items-center gap-2">
-                  <ShieldAlert size={18} /> TARGETING_DNA_2025
-               </h2>
-               <div className="w-2 h-2 rounded-full bg-ok animate-pulse"></div>
+// --- MAIN CONTROLLER ---
+export const MetaCommandCenter: React.FC<Props> = ({ briefingData }) => {
+   const { theme } = useTheme();
+
+   // STATE MACHINE
+   const [viewState, setViewState] = useState<MachineState>('MACRO_COMMAND');
+
+   // DATA STATES
+   const [budget, setBudget] = useState(150); // Default R$ 150
+   const [radius, setRadius] = useState(2000); // 2km Default
+   const [hotspots, setHotspots] = useState<HotspotResult[]>([]);
+   const [selectedSpots, setSelectedSpots] = useState<number[]>([]); // Multiselect IDs
+   const [focusedSpotId, setFocusedSpotId] = useState<number | null>(null); // Drill Down Focus
+
+   // DERIVED DATA (Forecasting)
+   const activeSpot = hotspots.find(h => h.id === focusedSpotId);
+
+   const totalAudience = useMemo(() => {
+      return hotspots
+         .filter(h => selectedSpots.includes(h.id))
+         .reduce((sum, h) => sum + (h.audience_total || 0), 0);
+   }, [selectedSpots, hotspots]);
+
+   const forecast = useMemo(() => {
+      // Se Drill Down, foca no spot ativo. Se Radar, foca no total selecionado.
+      const pop = viewState === 'DRILL_DOWN' && activeSpot
+         ? (activeSpot.audience_total || 50000)
+         : (totalAudience || 50000);
+      return calculateAdForecasting(budget, 15, pop);
+   }, [budget, activeSpot, totalAudience, viewState, selectedSpots]);
+
+   // ACTIONS
+   const handleScan = () => {
+      setViewState('RADAR_SCAN');
+      // Use center from briefing if available, otherwise default SP
+      const center: [number, number] = briefingData.geography?.coords ? [briefingData.geography.coords.lat, briefingData.geography.coords.lng] : [-23.5505, -46.6333];
+      generateHotspots(briefingData, center, true).then(results => {
+         setHotspots(results);
+         // Auto-select top 3 by default for immediate value
+         setSelectedSpots(results.slice(0, 3).map(h => h.id));
+      });
+   };
+
+   const handleSpotClick = (id: number) => {
+      setFocusedSpotId(id);
+      setViewState('DRILL_DOWN');
+      setRadius(2000); // Reset radius on new select
+   };
+
+   const toggleSelection = (id: number, e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      setSelectedSpots(prev =>
+         prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      );
+   };
+
+   // --- RENDERERS ---
+
+   // 1. HUD (Heads-Up Display)
+   const renderHUD = () => (
+      <div className="absolute top-4 left-4 right-4 z-[1000] flex gap-4 pointer-events-none">
+         {/* Global Score Card */}
+         <div className="bg-slate-900/90 backdrop-blur border border-slate-700 p-3 rounded-lg flex items-center gap-3 shadow-xl pointer-events-auto">
+            <div className="bg-blue-900/50 p-2 rounded-full">
+               <Target className="text-blue-400 w-5 h-5" />
             </div>
-
-            <div className="space-y-4 overflow-y-auto custom-scrollbar pr-2 flex-1">
-               <MetaAdsPanel briefingData={briefingData} />
-               {/* Targeting DNA Card */}
-               <div className="bg-surface p-5 rounded-2xl border border-app relative group hover:border-accent transition-all">
-                  <div className="flex items-start justify-between">
-                     <div>
-                        <span className="text-[9px] text-muted2 uppercase font-black tracking-widest block mb-2">Targeting DNA</span>
-                        <h3 className="text-[12px] font-black text-app leading-tight">{targetingDNA.name}</h3>
-                     </div>
-                     <button
-                        onClick={() => {
-                           try {
-                              navigator.clipboard.writeText(JSON.stringify(targetingDNA, null, 2));
-                              setCopiedId('dna_full');
-                              setTimeout(() => setCopiedId(null), 2000);
-                           } catch (e) { console.warn(e); }
-                        }}
-                        className="text-muted2 hover:text-accent transition-all"
-                     >
-                        {copiedId === 'dna_full' ? <CheckCircle size={16} className="text-ok" /> : <Copy size={16} />}
-                     </button>
-                  </div>
-
-                  <div className="mt-3 text-[10px] text-muted">
-                     <div className="mb-2"><strong>Geo:</strong> {targetingDNA.geoStrategy}</div>
-                     <div className="mb-2"><strong>Objetivo:</strong> {targetingDNA.campaignObjective}</div>
-                     <div className="mb-2"><strong>KPIs:</strong> {Array.isArray(targetingDNA.kpis) ? targetingDNA.kpis.join(', ') : targetingDNA.kpis}</div>
-                     <div className="mb-2"><strong>Audiences:</strong> {targetingDNA.audiences?.slice(0, 3).join(' • ')}</div>
-                  </div>
-
+            <div>
+               <div className="text-[10px] text-slate-400 uppercase tracking-wider">Global Thermal Score</div>
+               <div className="text-xl font-black text-white">
+                  {hotspots.length > 0 ? '87/100' : '--/--'}
                </div>
+            </div>
+         </div>
 
-               {analysis && <ExplainabilityCard analysis={analysis} />}
-
-               <div className="bg-surface p-5 rounded-2xl border border-app relative group hover:border-accent transition-all">
-                  <span className="text-[9px] text-muted2 uppercase font-black tracking-widest block mb-2">Interesses Macro (Meta Compliance)</span>
-                  <p className="text-[12px] font-bold text-app leading-relaxed italic pr-8">"{targetingDNA.interests}"</p>
-                  <button onClick={() => handleCopy('dna', targetingDNA.interests)} className="absolute top-4 right-4 text-muted2 hover:text-accent transition-all">
-                     {copiedId === 'dna' ? <CheckCircle size={14} className="text-ok" /> : <Copy size={14} />}
-                  </button>
+         {/* Budget Controller (Global) */}
+         <div className="bg-slate-900/90 backdrop-blur border border-slate-700 p-3 rounded-lg flex-1 flex items-center gap-4 shadow-xl pointer-events-auto">
+            <div className="bg-green-900/50 p-2 rounded-full">
+               <DollarSign className="text-green-400 w-5 h-5" />
+            </div>
+            <div className="flex-1">
+               <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                  <span>ORÇAMENTO DIÁRIO</span>
+                  <span className="text-green-400 font-bold">R$ {budget},00</span>
                </div>
+               <input
+                  type="range"
+                  min="50" max="5000" step="50"
+                  value={budget}
+                  onChange={(e) => setBudget(Number(e.target.value))}
+                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-500"
+               />
+            </div>
+         </div>
 
+         {/* Positioning Badge */}
+         <div className="bg-slate-900/90 backdrop-blur border border-slate-700 px-4 py-2 rounded-lg flex items-center justify-center shadow-xl pointer-events-auto">
+            <span className="text-xs font-bold text-yellow-500 border border-yellow-500/30 px-2 py-1 rounded bg-yellow-500/10">
+               PREMIUM CLASS A
+            </span>
+         </div>
+      </div>
+   );
 
-               <div className={`p-5 rounded-2xl border-2 flex flex-col gap-3 transition-all ${(targetingDNA.advantage || '').includes('ON') ? 'bg-green-500/5 border-green-500/30' : 'bg-orange-500/5 border-orange-500/30'}`}>
-                  <div className="flex items-center justify-between">
-                     <span className="text-[9px] font-black uppercase tracking-widest text-muted2">Meta Advantage+</span>
-                     <span className={`text-[10px] font-black px-3 py-1 rounded-full ${(targetingDNA.advantage || '').includes('ON') ? 'bg-green-600 text-white' : 'bg-orange-600 text-white'}`}>
-                        {targetingDNA.advantage}
+   // 2. TACTICAL OVERLAY (State 3 Only)
+   const renderTacticalOverlay = () => {
+      if (viewState !== 'DRILL_DOWN' || !activeSpot) return null;
+
+      const isRisky = forecast?.risk?.isSaturated;
+
+      return (
+         <div className="absolute bottom-8 left-8 z-[1000] w-96 bg-slate-950/95 backdrop-blur border border-slate-600 rounded-xl p-5 shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-300 pointer-events-auto">
+            <div className="flex justify-between items-start mb-4">
+               <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                     {activeSpot.name}
+                     <span className={`text-[10px] px-2 py-0.5 rounded text-black font-black ${getThermalColor(activeSpot.score || 0).replace('#', 'bg-[#')}`}>
+                        SCORE {activeSpot.score}
                      </span>
-                  </div>
-                  <p className="text-[11px] text-muted font-black tracking-tight">{targetingDNA.strategy}</p>
-                  <p className="text-[9px] text-muted2 uppercase font-bold italic opacity-60 leading-tight">{targetingDNA.warning}</p>
-               </div>
-
-               <div className="bg-surface p-5 rounded-2xl border border-app relative group hover:border-accent transition-all">
-                  <span className="text-[9px] text-muted2 uppercase font-black tracking-widest block mb-2">Auditoria de Qualidade</span>
-                  <button
-                     onClick={() => {
-                        import('../services/auditRealData').then(m => {
-                           m.auditRealData({ analysis, hotspots, mapLayers: [] });
-                           alert('Audit ran! Check console.');
-                        });
-                     }}
-                     className="w-full py-2 bg-app hover:bg-surface2 text-muted text-[10px] font-bold rounded uppercase tracking-wider transition-colors"
-                  >
-                     ► Run Real Data Audit
-                  </button>
-               </div>
-
-               <div className="bg-red-950/10 p-5 rounded-2xl border border-red-500/20">
-                  <span className="text-[9px] text-red-400 font-black uppercase flex items-center gap-2 mb-3">
-                     <AlertTriangle size={16} /> Exclusões de Público
-                  </span>
-                  <p className="text-[10px] text-red-100/60 leading-relaxed font-medium">
-                     Subir Lista de Clientes (CSV/LTV). Lembre-se: Exclusão manual por interesse foi removida em 2025. Use listas customizadas.
-                  </p>
-               </div>
-            </div>
-
-            <div className="mt-auto pt-4 border-t border-app flex items-center justify-between text-muted2 text-[10px] font-black uppercase tracking-widest">
-               <div className="flex items-center gap-2"><Database size={14} /> IBGE_ORACLE_CONNECTED</div>
-            </div>
-         </aside>
-
-         {/* PAINEL CENTRAL DE COMANDO */}
-         <section className="flex-1 h-full min-h-0 flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-4 shrink-0">
-               <div className="bg-surface2 p-5 rounded-[24px] border border-app flex items-center gap-4">
-                  <div className="bg-accent/10 p-3 rounded-2xl text-accent"><DollarSign size={24} /></div>
-                  <div>
-                     <span className="text-[10px] text-muted2 uppercase font-black tracking-widest block mb-1">Budget Sugerido</span>
-                     <p className="text-xl font-black text-app">R$ 150,00 <span className="text-xs text-muted2">/dia</span></p>
+                  </h3>
+                  <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
+                     <Zap className="w-3 h-3 text-yellow-400" />
+                     Live Radar: {activeSpot.audience_total?.toLocaleString()} pessoas detectadas
                   </div>
                </div>
-               <div className="bg-surface2 p-5 rounded-[24px] border border-app flex items-center gap-4">
-                  <div className="bg-cyan-500/10 p-3 rounded-2xl text-cyan-400"><Scale size={24} /></div>
-                  <div>
-                     <span className="text-[10px] text-muted2 uppercase font-black tracking-widest block mb-1">Posicionamento</span>
-                     <p className="text-sm font-black text-app uppercase tracking-tighter">{briefingData.marketPositioning}</p>
-                  </div>
-               </div>
-               <div className="bg-surface2 p-5 rounded-[24px] border border-app flex items-center gap-4">
-                  <div className="bg-purple-500/10 p-3 rounded-2xl text-purple-400"><ShieldCheck size={24} /></div>
-                  <div>
-                     <span className="text-[10px] text-muted2 uppercase font-black tracking-widest block mb-1">Score_Real_IBGE</span>
-                     <p className="text-xl font-black text-app">{analysis?.score}%</p>
-                  </div>
-               </div>
-            </div>
-
-            <div className="flex-1 min-h-[520px] bg-app rounded-[40px] border-4 border-app overflow-hidden relative shadow-2xl">
-               <Suspense fallback={<div className="absolute inset-0 flex items-center justify-center text-muted2">Carregando mapa...</div>}>
-                  <BiaWarRoomMap
-                     className="h-full w-full"
-                     center={mapCenter}
-                     settings={{ ...mapSettings, zoom: selectedHotspot ? 16 : 13, radius: selectedHotspot ? 500 : 2000, hideNoise: true }}
-                     hotspots={hotspots}
-                     selectedHotspotId={selectedHotspot?.id}
-                     setMapInstance={setMap}
-                     cityName={cityName}
-                     geoSignals={briefingData.geoSignals}
-                  />
-               </Suspense>
-
-               {selectedHotspot && (
-                  <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[1000] bg-surface2 px-8 py-5 rounded-[32px] border-2 border-orange-500/40 flex items-center gap-8 backdrop-blur-3xl shadow-[0_25px_60px_rgba(0,0,0,0.8)] border-b-8 border-b-orange-600 animate-slide-up">
-                     <div className="flex items-center gap-4">
-                        <div className="w-3 h-3 rounded-full bg-orange-500 animate-ping"></div>
-                        <div>
-                           <span className="text-muted2 text-[9px] font-black uppercase tracking-widest block mb-1">Alvo_Lock</span>
-                           <span className="text-sm font-black uppercase tracking-tighter text-app">{selectedHotspot.name}</span>
-                        </div>
-                     </div>
-                     <div className="h-10 w-[1px] bg-border-app"></div>
-                     <div className="flex items-center gap-4">
-                        <Crosshair size={20} className="text-orange-500" />
-                        <div>
-                           <span className="text-muted2 text-[9px] font-black uppercase tracking-widest block mb-1">Protocolo_Precisão</span>
-                           <span className="text-sm font-black text-ok uppercase">500 MT FIXED</span>
-                        </div>
-                     </div>
-                     <button onClick={() => setSelectedHotspot(null)} className="ml-4 w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-full transition-all">✕</button>
-                  </div>
-               )}
-            </div>
-
-            <div className="h-[200px] shrink-0 bg-surface2 rounded-[32px] border border-app overflow-hidden">
-               <PulseGraphWidget dark />
-            </div>
-         </section>
-
-         {/* LISTA DE ALVOS (DIREITA) */}
-         <aside className="w-[320px] h-full flex flex-col gap-4 bg-surface2 p-6 rounded-[32px] border border-app backdrop-blur-2xl">
-            <h2 className="text-[11px] font-black text-orange-500 uppercase tracking-[0.2em] flex items-center gap-2 mb-2">
-               <Flame size={18} /> SNIPER_HOTSPOTS
-            </h2>
-            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-2">
-               {hotspots.map((spot) => (
-                  <button
-                     key={spot.id}
-                     onClick={() => {
-                        setSelectedHotspot(spot);
-                        if (onCenterChange) onCenterChange([spot.lat, spot.lng]);
-                        if (map) map.flyTo([spot.lat, spot.lng], 16, { duration: 1.5 });
-                     }}
-                     className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all group text-left ${selectedHotspot?.id === spot.id ? 'bg-orange-600 border-orange-400' : 'bg-surface border-app hover:border-orange-500/30'}`}
-                  >
-                     <div className="flex items-center gap-4">
-                        <span className={`text-[10px] font-black w-8 h-8 flex items-center justify-center border rounded-xl ${selectedHotspot?.id === spot.id ? 'bg-white text-orange-600 border-white' : 'border-app text-muted2'}`}>
-                           {spot.rank}
-                        </span>
-                        <div>
-                           <p className={`text-[12px] font-black uppercase truncate max-w-[120px] tracking-tight ${selectedHotspot?.id === spot.id ? 'text-white' : 'text-muted'}`}>{spot.name}</p>
-                           <div className="flex items-center gap-2">
-                              <p className={`text-[9px] font-black uppercase tracking-widest ${selectedHotspot?.id === spot.id ? 'text-orange-200' : 'text-muted2'}`}>Score: {spot.score}%</p>
-                              {spot.provenance && <ProvenanceBadge provenance={spot.provenance} />}
-                           </div>
-                        </div>
-                     </div>
-                     <ChevronRight size={16} className={selectedHotspot?.id === spot.id ? 'text-white translate-x-1' : 'text-muted2'} />
-                  </button>
-               ))}
-            </div>
-            <div className="pt-5 border-t border-app">
-               <button className="w-full py-5 bg-ok text-app rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-white transition-all transform active:scale-95 shadow-xl flex items-center justify-center gap-3">
-                  <Crosshair size={18} /> ATIVAR MODO SNIPER
+               <button onClick={() => setViewState('RADAR_SCAN')} className="text-xs text-slate-500 hover:text-white border px-2 py-1 rounded border-slate-700">
+                  VOLTAR AO RADAR
                </button>
             </div>
-         </aside>
 
-         <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 77, 0, 0.2); border-radius: 10px; }
-        
-        @keyframes slide-up {
-          from { transform: translate(-50%, 40px); opacity: 0; }
-          to { transform: translate(-50%, 0); opacity: 1; }
-        }
-        .animate-slide-up {
-          animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-      `}</style>
+            {/* Feature 1: Radius Slider */}
+            <div className="mb-6">
+               <div className="flex justify-between text-xs font-semibold text-slate-300 mb-2">
+                  <span>RAIO TÁTICO (The Expander)</span>
+                  <span>{(radius / 1000).toFixed(1)} km</span>
+               </div>
+               <input
+                  type="range"
+                  min="100" max="10000" step="100"
+                  value={radius}
+                  onChange={(e) => setRadius(Number(e.target.value))}
+                  className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${isRisky ? 'bg-red-900 accent-red-500' : 'bg-blue-900 accent-blue-500'}`}
+               />
+            </div>
+
+            {/* Feature 2: Forecasting Logic */}
+            <div className={`p-3 rounded border ${isRisky ? 'bg-red-900/20 border-red-500/50' : 'bg-slate-800 border-slate-700'}`}>
+               <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs text-slate-400">Alcance Estimado (Dia)</span>
+                  <span className="text-sm font-bold text-white">{forecast.estimatedReach.toLocaleString(undefined, { maximumFractionDigits: 0 })} pessoas</span>
+               </div>
+
+               {/* Saturation Alert */}
+               <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50">
+                  {isRisky ? <AlertTriangle className="w-4 h-4 text-red-500" /> : <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                  <span className={`text-[10px] font-bold ${isRisky ? 'text-red-400' : 'text-green-400'}`}>
+                     {forecast.risk.message}
+                  </span>
+               </div>
+            </div>
+
+            {/* Feature 3: Actions */}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+               <button className="bg-red-900/10 hover:bg-red-900/30 text-red-400 text-xs py-3 rounded border border-red-900/30 font-bold transition-all">
+                  EXCLUIR SETOR
+               </button>
+               <button
+                  onClick={() => {
+                     if (focusedSpotId && !selectedSpots.includes(focusedSpotId)) toggleSelection(focusedSpotId);
+                     setViewState('RADAR_SCAN');
+                  }}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs py-3 rounded font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 transition-all">
+                  <CheckSquare size={14} /> ADICIONAR
+               </button>
+            </div>
+         </div>
+      );
+   };
+
+   // 3. CTA START SCAN (State 1 Only)
+   const renderStartButton = () => {
+      if (viewState !== 'MACRO_COMMAND') return null;
+      return (
+         <div className="absolute inset-0 z-[900] flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-auto">
+            <button
+               onClick={handleScan}
+               className="group relative flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-full text-xl font-black tracking-widest shadow-2xl shadow-blue-500/30 transition-all transform hover:scale-105"
+            >
+               <div className="absolute inset-0 rounded-full border border-white/20 animate-ping"></div>
+               <Zap className="w-6 h-6 fill-current" />
+               INICIAR VARREDURA TÁTICA
+            </button>
+         </div>
+      );
+   };
+
+   // --- MAP CONFIG ---
+   const mapCenter: [number, number] = activeSpot
+      ? [activeSpot.lat, activeSpot.lng]
+      : (briefingData.geography?.coords ? [briefingData.geography.coords.lat, briefingData.geography.coords.lng] : [-23.5505, -46.6333]);
+
+   const mapZoom = viewState === 'DRILL_DOWN' ? 14 : (viewState === 'RADAR_SCAN' ? 12 : 11);
+
+   return (
+      <div className="relative w-full h-[85vh] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex flex-col shadow-2xl">
+         {/* 1. LAYER: HUD */}
+         {renderHUD()}
+
+         {/* 2. LAYER: MAP ENGINE */}
+         <div className="flex-1 relative z-0">
+            <MapContainer
+               center={[-23.5505, -46.6333]}
+               zoom={11}
+               style={{ height: '100%', width: '100%', background: '#0f172a' }}
+               zoomControl={false}
+            >
+               <TileLayer
+                  url={theme === 'dark'
+                     ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                     : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                  }
+                  attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+               />
+
+               <MapFlyTo center={mapCenter} zoom={mapZoom} />
+
+               {/* RENDER HOTSPOTS */}
+               {hotspots.map((spot) => (
+                  <ThermalCircle
+                     key={spot.id}
+                     spot={spot}
+                     isSelected={spot.id === focusedSpotId}
+                     isDimmed={Boolean(focusedSpotId && spot.id !== focusedSpotId)}
+                     radius={radius}
+                     onClick={() => handleSpotClick(spot.id)}
+                  />
+               ))}
+            </MapContainer>
+
+            {/* 3. LAYER: INTERFACES */}
+            {renderStartButton()}
+            {renderTacticalOverlay()}
+         </div>
+
+         {/* 4. LAYER: SIDEBAR LIST (Scan Only - RICH VERSION) */}
+         {viewState === 'RADAR_SCAN' && (
+            <div className="absolute top-24 right-4 z-[1000] w-80 bg-slate-900/95 backdrop-blur border border-slate-700 rounded-xl overflow-hidden flex flex-col max-h-[600px] pointer-events-auto shadow-2xl animate-in slide-in-from-right-10 fade-in duration-500">
+               <div className="p-4 bg-slate-950 border-b border-slate-700 flex justify-between items-center">
+                  <div>
+                     <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold block mb-1">ALVOS DETECTADOS</span>
+                     <span className="text-xl font-black text-white flex items-center gap-2">
+                        {selectedSpots.length} <span className="text-sm text-slate-500 font-normal">/ {hotspots.length}</span>
+                     </span>
+                  </div>
+                  <div className="bg-blue-900/20 p-2 rounded-lg border border-blue-500/20">
+                     <Layers className="w-5 h-5 text-blue-400" />
+                  </div>
+               </div>
+
+               {/* Scrollable List */}
+               <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar bg-slate-900/50">
+                  {hotspots.map(spot => {
+                     const isSelected = selectedSpots.includes(spot.id);
+                     return (
+                        <div
+                           key={spot.id}
+                           className={`group flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${isSelected ? 'bg-blue-900/20 border-blue-500/40' : 'bg-transparent border-transparent hover:bg-slate-800 hover:border-slate-700'}`}
+                           onClick={() => handleSpotClick(spot.id)}
+                        >
+                           <div className="flex items-center gap-3">
+                              <button
+                                 onClick={(e) => toggleSelection(spot.id, e)}
+                                 className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-500 border border-slate-600 hover:border-slate-400'}`}
+                              >
+                                 {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                              </button>
+                              <div>
+                                 <span className={`text-xs font-bold block ${isSelected ? 'text-white' : 'text-slate-400 group-hover:text-slate-200'}`}>{spot.name}</span>
+                                 <div className="flex items-center gap-2">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${getThermalColor(spot.score || 0).replace('#', 'bg-[#')}`} />
+                                    <span className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">{spot.type || 'HOTSPOT'}</span>
+                                 </div>
+                              </div>
+                           </div>
+                           <span className={`text-xs font-black ${isSelected ? 'text-blue-400' : 'text-slate-600'}`}>{spot.score}</span>
+                        </div>
+                     );
+                  })}
+               </div>
+
+               {/* Aggregation Footer */}
+               <div className="p-4 bg-slate-950 border-t border-slate-700">
+                  <div className="flex justify-between items-center mb-3 text-xs text-slate-400">
+                     <span>ALCANCE COMBINADO</span>
+                     <span className="font-mono text-white font-bold">{totalAudience.toLocaleString()}</span>
+                  </div>
+                  <button className="w-full py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-lg shadow-green-900/20 transition-all transform active:scale-95 flex items-center justify-center gap-2">
+                     <Crosshair size={16} /> CONFIRMAR SELEÇÃO
+                  </button>
+               </div>
+            </div>
+         )}
+
       </div>
    );
 };
