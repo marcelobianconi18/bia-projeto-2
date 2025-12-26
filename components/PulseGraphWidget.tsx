@@ -44,7 +44,7 @@ export const PulseGraphWidget: React.FC<PulseGraphWidgetProps> = ({ dark = false
   };
 
   return (
-    <div className={`min-h-[200px] rounded-3xl flex flex-col h-full overflow-hidden transition-all shadow-xl ${dark ? 'bg-[#1c1f26] border border-white/5' : 'bg-[#f3f4f6] border border-slate-200'}`}>
+    <div className={`min-h-[350px] rounded-3xl flex flex-col h-full overflow-hidden transition-all shadow-xl ${dark ? 'bg-[#1c1f26] border border-white/5' : 'bg-[#f3f4f6] border border-slate-200'}`}>
       {/* Header */}
       <div className="p-5 flex justify-between items-center">
         <h3 className={`font-black text-[12px] uppercase tracking-widest ${dark ? 'text-slate-400' : 'text-slate-400'}`}>
