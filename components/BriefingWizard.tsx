@@ -5,6 +5,8 @@ import {
   Store, Bike, Truck, ShoppingBag, ShoppingCart, AlertCircle, Globe, Map, User, Heart, Coins, Gem, GraduationCap, ShieldCheck, Zap, MessageCircle, Eye, MousePointer2, Layers
 } from 'lucide-react';
 import { geocodeCity } from '../services/connectors/osmGeocode';
+import { runBriefingScan } from '../services/scanOrchestrator';
+import { ScanResult } from '../types';
 
 // Map legacy State Anchors for fallback if needed, or remove if fully deprecated.
 // Keeping it minimal for now as we use Nominatim for City.
@@ -17,7 +19,7 @@ const BR_STATES_BY_REGION = [
 ];
 
 interface BriefingWizardProps {
-  onComplete: (data: BriefingData) => void;
+  onComplete: (data: BriefingData, scanResult?: ScanResult) => void;
   onExplorerMode?: () => void;
 }
 
@@ -54,6 +56,52 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete }) =>
   const [data, setData] = useState<BriefingData>(initialBriefing);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [geoError, setGeoError] = useState('');
+
+  // Scanning State
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanLogs, setScanLogs] = useState<string[]>([]);
+
+  const addLog = (msg: string) => setScanLogs(prev => [...prev, msg]);
+
+  const handleConfirmScanning = async () => {
+    setIsScanning(true);
+    setScanLogs([]);
+    addLog(">> INICIANDO BIA PROTOCOL v3.1...");
+    addLog(">> Validando Integridade do Briefing... OK");
+
+    try {
+      // 1. Simulação visual de processos (Feedback UX)
+      await new Promise(r => setTimeout(r, 600));
+      addLog(">> Conectando ao Backbone IBGE (Malha 2022)...");
+
+      await new Promise(r => setTimeout(r, 800));
+      addLog(">> Escaneando Concorrentes (Google Places)...");
+
+      // 2. Execução Real (Orchestrator)
+      const result = await runBriefingScan(data as any); // Cast as compatible
+
+      if (result.geocode.status === 'ERROR') {
+        addLog("!! ERRO CRÍTICO: FALHA NA GEOCODIFICAÇÃO !!");
+        alert("Não foi possível localizar a cidade. Verifique a grafia.");
+        setIsScanning(false);
+        return;
+      }
+
+      addLog(">> Compilando GeoSignals...");
+      await new Promise(r => setTimeout(r, 500));
+
+      addLog(">> Sincronização Concluída. Liberando Dashboard.");
+      await new Promise(r => setTimeout(r, 400)); // Final delay for reading
+
+      onComplete(data, result);
+
+    } catch (err) {
+      console.error(err);
+      addLog("!! ERRO DE CONEXÃO !!");
+      alert("Erro ao conectar com serviços de inteligência. Tente novamente.");
+      setIsScanning(false);
+    }
+  };
 
   const update = (field: keyof BriefingData, val: any) => setData(prev => ({ ...prev, [field]: val }));
 
@@ -374,23 +422,96 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete }) =>
             </div>
           </div>
         );
-      case 9: // Resumo
+      case 9: // Resumo (Review Deck & Trigger)
         return (
-          <div className="space-y-6 animate-fade-in text-center">
-            <div className="p-4 bg-purple-900/20 rounded-full w-20 h-20 mx-auto flex items-center justify-center border border-purple-500/50 mb-4">
-              <ShieldCheck size={40} className="text-purple-400" />
+          <div className="space-y-6 animate-fade-in relative">
+            {/* --- LOADING OVERLAY (TERMINAL STYLE) --- */}
+            {isScanning && (
+              <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md z-50 rounded-xl flex flex-col items-center justify-center p-6 border border-slate-700">
+                <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mb-6" />
+                <div className="w-full max-w-sm font-mono text-xs space-y-2">
+                  {scanLogs.map((log, i) => (
+                    <div key={i} className={`truncate ${log.includes('!!') ? 'text-red-400 font-bold' : log.includes('>>') ? 'text-emerald-400' : 'text-slate-400'}`}>
+                      {log}
+                    </div>
+                  ))}
+                  <div className="animate-pulse text-emerald-600">_</div>
+                </div>
+              </div>
+            )}
+
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center p-3 bg-blue-50 rounded-full border border-blue-100 mb-3 shadow-sm">
+                <ShieldCheck size={24} className="text-blue-600" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Confirmação Tática</h2>
+              <p className="text-xs text-slate-500 font-medium">Revise os parâmetros antes da injeção de dados.</p>
             </div>
-            <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Briefing Validado</h2>
-            <div className="bg-slate-950 p-6 rounded-xl border border-white/5 text-left grid grid-cols-2 gap-4">
-              <div><p className="text-[10px] text-slate-500 uppercase">Objetivo</p><p className="text-xs text-white font-bold">{data.objective}</p></div>
-              <div><p className="text-[10px] text-slate-500 uppercase">Região</p><p className="text-xs text-white font-bold">{data.geography.city}</p></div>
-              <div><p className="text-[10px] text-slate-500 uppercase">Modelo</p><p className="text-xs text-white font-bold">{data.operationalModel}</p></div>
-              <div><p className="text-[10px] text-slate-500 uppercase">Fontes</p><p className="text-xs text-white font-bold">
-                {[data.dataSources.googleAds.connected, data.dataSources.metaAds.connected, data.dataSources.rfb.connected].filter(Boolean).length} Conectadas
-              </p></div>
+
+            {/* --- GLASS CARD SUMMARY --- */}
+            <div className="bg-white/60 backdrop-blur-sm border border-slate-200 rounded-xl p-1 shadow-sm">
+              <div className="grid grid-cols-1 divide-y divide-slate-100">
+                {/* Mission */}
+                <div className="p-3 flex items-start gap-3">
+                  <div className="mt-1"><Target className="w-4 h-4 text-slate-400" /></div>
+                  <div>
+                    <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Missão / Objetivo</p>
+                    <div className="text-sm font-bold text-slate-800">{data.objective || 'Não definido'}</div>
+                    <div className="text-[10px] text-slate-500 italic mt-0.5 trim-text">"{data.productDescription?.slice(0, 40)}..."</div>
+                  </div>
+                </div>
+
+                {/* Territory */}
+                <div className="p-3 flex items-start gap-3 bg-slate-50/50">
+                  <div className="mt-1"><MapPin className="w-4 h-4 text-blue-500" /></div>
+                  <div>
+                    <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Território Alvo</p>
+                    <div className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                      {data.geography.city}
+                      <CheckCircle className="w-3 h-3 text-emerald-500" />
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono">IBGE Scope: {data.geography.level}</div>
+                  </div>
+                </div>
+
+                {/* Model & Econ */}
+                <div className="p-3 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1"><Store size={10} /> Modelo</p>
+                    <div className="text-xs font-bold text-slate-700">{data.operationalModel}</div>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1"><Gem size={10} /> Posicionamento</p>
+                    <div className="text-xs font-bold text-slate-700">{data.marketPositioning}</div>
+                  </div>
+                </div>
+
+                {/* Source Grid */}
+                <div className="p-3">
+                  <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider mb-2">Monitoramento Ativo</p>
+                  <div className="flex gap-2">
+                    <span className={`px-2 py-1 rounded text-[9px] font-bold border ${data.dataSources.googleAds.connected ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>Google Ads</span>
+                    <span className={`px-2 py-1 rounded text-[9px] font-bold border ${data.dataSources.metaAds.connected ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>Meta Ads</span>
+                    <span className={`px-2 py-1 rounded text-[9px] font-bold border ${data.dataSources.rfb.connected ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>RFB</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <button onClick={() => onComplete(data)} className="w-full py-5 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl font-black text-white shadow-xl hover:scale-[1.02] transition-all uppercase tracking-widest mt-4">
-              GERAR MAPA REAL
+
+            <button
+              onClick={handleConfirmScanning}
+              disabled={isScanning}
+              className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl font-bold text-white shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 hover:scale-[1.01] transition-all uppercase tracking-widest flex items-center justify-center gap-3 text-sm"
+            >
+              {isScanning ? (
+                <>
+                  <Loader2 className="animate-spin" /> PROCESSANDO...
+                </>
+              ) : (
+                <>
+                  GERAR ESTRATÉGIA REAL <Zap size={16} className="text-yellow-300 fill-yellow-300" />
+                </>
+              )}
             </button>
           </div>
         );

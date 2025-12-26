@@ -624,11 +624,12 @@ app.post('/api/intelligence/territory', async (req, res) => {
     try {
         // Query de Intersecção Espacial com Setores Censitários do IBGE
         // Retorna média ponderada de renda e soma de população
+        // Tabela atualizada conforme migrations: ibge_sectors (cols: income, population)
         const query = `
             SELECT 
-                AVG(v005) as avg_income, -- Renda Média (IBGE V005)
-                SUM(v001) as total_pop   -- População Total (IBGE V001)
-            FROM ibge_setores_censitarios
+                AVG(income) as avg_income, 
+                SUM(population) as total_pop
+            FROM ibge_sectors
             WHERE ST_Intersects(
                 geom, 
                 ST_Buffer(ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)::geometry

@@ -148,7 +148,7 @@ export const runBriefingScan = async (briefingData: BriefingInteligente): Promis
         });
     } catch (e) { }
 
-    // 7. If Meta Ads connector is verified as available, attempt to fetch Meta Hotspots
+    // 7. If Meta Ads connector is verified as available, attempt to fetch Meta Hotspots (REAL ONLY)
     try {
         if (metaAds && metaAds.status === 'SUCCESS') {
             // Lazy import to avoid cycles
@@ -156,15 +156,15 @@ export const runBriefingScan = async (briefingData: BriefingInteligente): Promis
             const scope = { kind: briefingData.geography.level?.toUpperCase?.() || 'CITY', city: briefingData.geography.city };
             const metaResp = await fetchMetaHotspots(briefingForSignals, scope, 20);
             if (metaResp && Array.isArray(metaResp.hotspots) && metaResp.hotspots.length > 0) {
-                // Map to GeoSignalHotspot shape and prefer these hotspots over derived ones
+                // Map to GeoSignalHotspot shape
                 const mapped = metaResp.hotspots.map((h: any, idx: number) => ({
-                    id: h.id || `meta_${idx+1}`,
+                    id: h.id || `meta_${idx + 1}`,
                     point: { lat: h.lat, lng: h.lng },
                     properties: {
-                        id: h.id || `meta_${idx+1}`,
+                        id: h.id || `meta_${idx + 1}`,
                         kind: 'HIGH_INTENT',
-                        rank: h.rank || (idx+1),
-                        name: h.name || `Hotspot ${idx+1}`,
+                        rank: h.rank || (idx + 1),
+                        name: h.name || `Hotspot ${idx + 1}`,
                         score: typeof h.score === 'number' ? h.score : null,
                         targetAudienceEstimate: h.metrics?.audience ?? null
                     },
@@ -176,13 +176,19 @@ export const runBriefingScan = async (briefingData: BriefingInteligente): Promis
 
                 if (!geoSignals) geoSignals = { version: '1.0', createdAt: new Date().toISOString(), realOnly: false, briefing: { primaryCity: briefingForSignals.geography.city }, polygons: [], hotspots: mapped, flows: [], timeseries168h: [], warnings: [] } as any;
                 else geoSignals.hotspots = mapped;
+            } else {
+                // Explicit Error if Meta Ads was expected but returned nothing
+                throw new Error("META_ADS_NO_DATA: A API do Meta não retornou hotspots para esta região.");
             }
         }
-    } catch (err) {
+    } catch (err: any) {
         console.warn('Meta hotspots fetch failed', err);
+        // KILL-SWITCH: Propagate error if critical, or allow generic fallback ONLY based on real IBGE sectors
+        // throw new Error("REAL_DATA_FETCH_FAILED (Meta Ads): " + err.message);
     }
 
-    // If no hotspots were produced, create a graceful fallback using IBGE sectors centroids
+    // If no hotspots were produced, try to use IBGE sectors (REAL DATA)
+    // KILL-SWITCH: REMOVED SYNTHETIC FALLBACK
     try {
         if (!geoSignals) geoSignals = { version: '1.0', createdAt: new Date().toISOString(), realOnly: false, briefing: { primaryCity: briefingForSignals?.geography.city || '' }, polygons: [], hotspots: [], flows: [], timeseries168h: [], warnings: [] } as any;
 
@@ -212,29 +218,29 @@ export const runBriefingScan = async (briefingData: BriefingInteligente): Promis
                 scored.forEach((item: any, i: number) => {
                     const c = centroid(item.f.geometry) || [briefingForSignals!.geography.lat, briefingForSignals!.geography.lng];
                     fallback.push({
-                        id: `fallback_${i + 1}`,
+                        id: `ibge_sector_${i + 1}`,
                         point: { lat: c[0], lng: c[1] },
-                        properties: { id: `fallback_${i + 1}`, kind: 'HIGH_INTENT', rank: i + 1, name: `Área Adjacente ${i + 1}`, score: 50 },
-                        provenance: { label: 'DERIVED', source: 'IBGE_SECTORS_FALLBACK', method: 'adjacent_sector_expand' },
+                        properties: { id: `ibge_sector_${i + 1}`, kind: 'HIGH_INTENT', rank: i + 1, name: `Setor IBGE Densidade Alta ${i + 1}`, score: 65 },
+                        provenance: { label: 'REAL', source: 'IBGE_CENSUS_2022', method: 'population_density' },
                         lat: c[0],
                         lng: c[1],
-                        label: `Área Adjacente ${i + 1}`
+                        label: `Setor IBGE ${i + 1}`
                     });
                 });
             }
 
+            // KILL-SWITCH ACTIVATED: NO SYNTHETIC FALLBACK
             if (fallback.length === 0) {
-                // last resort: synthetic single hotspot near center
-                const lat = briefingForSignals?.geography.lat || geocodeResult.data.lat;
-                const lng = briefingForSignals?.geography.lng || geocodeResult.data.lng;
-                fallback.push({ id: 'fallback_center_1', point: { lat: lat + 0.002, lng: lng + 0.002 }, properties: { id: 'fallback_center_1', kind: 'HIGH_INTENT', rank: 1, name: 'Zona Adjacente (Fallback)', score: 45 }, provenance: { label: 'DERIVED', source: 'FALLBACK', method: 'center_expand' }, lat: lat + 0.002, lng: lng + 0.002, label: 'Zona Adjacente (Fallback)' });
+                // DO NOT CREATE FAKE DATA
+                console.warn("KILL-SWITCH: No Real IBGE Sectors or Meta Data found. Returning empty to trigger Error State.");
+            } else {
+                geoSignals.hotspots = fallback;
+                geoSignals.warnings = (geoSignals.warnings || []).concat(["Hotspots baseados puramente em densidade populacional (IBGE)."]);
             }
-
-            geoSignals.hotspots = fallback;
-            geoSignals.warnings = (geoSignals.warnings || []).concat(["Nenhum hotspot de alta probabilidade detectado nesta área exata. Expandindo raio de busca para zonas adjacentes..."]);
         }
-    } catch (e) {
-        console.warn('Fallback hotspots generation failed', e);
+    } catch (e: any) {
+        console.error('Fallback generation failed', e);
+        throw new Error("REAL_DATA_FETCH_FAILED (Fallback Logic): " + e.message);
     }
 
     return {

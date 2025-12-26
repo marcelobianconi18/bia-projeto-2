@@ -123,67 +123,53 @@ const App: React.FC = () => {
     }).filter(h => h !== null) as any[]; // Cast to avoid complex type match with strict filtering
   }, [briefingData, mapCenter, outOfJurisdiction, isRealOnly, scanResult]);
 
-  const handleBriefingComplete = async (data: BriefingInteligente) => {
+  const handleBriefingComplete = async (data: BriefingInteligente, preScan?: ScanResult) => {
     setRawBriefing(data);
+
+    // Se já temos o scan (via Wizard Trigger), pulamos o loading e vamos direto
+    if (preScan) {
+      setScanResult(preScan);
+      processScanAndNavigate(data, preScan, true);
+      return;
+    }
+
+    // Fallback Legacy (se chamado sem preScan)
     setView(AppStep.LOADING);
     setLoadingStatus("Iniciando Scan Real...");
 
     try {
-      // Start orchestrator and ensure a minimum UX delay with staged messages
       setLoadingStatus("Consultando Base IBGE...");
       const scanPromise = runBriefingScan(data);
-      // staging messages
       setTimeout(() => setLoadingStatus("Triangulando dados de Renda..."), 800);
       setTimeout(() => setLoadingStatus("Calculando Hotspots..."), 1600);
 
-      // Ensure minimum wait of ~2500ms so users see the 'work' happening (Labor Illusion)
       const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
       const [scan] = await Promise.all([scanPromise, sleep(2500)]);
+
       setScanResult(scan);
+      processScanAndNavigate(data, scan, false);
 
-      // 2. Validate Geocode
-      if (scan.geocode.status === 'ERROR' || !scan.geocode.data) {
-        alert("Falha na geocodificação. Tente outra cidade.");
-        setView(AppStep.BRIEFING);
-        return;
-      }
+    } catch (e) {
+      console.error(e);
+      setLoadingStatus("Erro Crítico no Scan.");
+    }
+  };
 
-      const { lat, lng } = scan.geocode.data;
+  const processScanAndNavigate = async (data: BriefingInteligente, scan: ScanResult, isInstant: boolean = false) => {
+    // 2. Validate Geocode
+    if (scan.geocode.status === 'ERROR' || !scan.geocode.data) {
+      alert("Falha na geocodificação. Tente outra cidade.");
+      setView(AppStep.BRIEFING);
+      return;
+    }
 
-      if (!isInsideBrazil(lat, lng)) {
-        setOutOfJurisdiction(true);
-        setMapCenter([lat, lng]);
-        // Create dummy legacy data for view
-        const legacyData: BriefingData = {
-          productDescription: data.productDescription,
-          contactMethod: data.contactMethod,
-          usageDescription: data.usageDescription,
-          operationalModel: data.operationalModel || null,
-          dataSources: data.dataSources,
-          marketPositioning: data.marketPositioning || null,
-          targetGender: data.targetGender || null,
-          targetAge: data.targetAge,
-          geography: {
-            city: data.geography.city,
-            state: data.geography.state || [],
-            country: data.geography.country || 'BR',
-            lat, lng,
-            level: data.geography.level,
-            selectedItems: [],
-            municipioId: scan.ibgeCode
-          },
-          objective: data.objective || null,
-          geoSignals: scan.geoSignals
-        };
-        setBriefingData(legacyData);
-        setView(AppStep.DASHBOARD);
-        return;
-      }
+    const { lat, lng } = scan.geocode.data;
 
-      setOutOfJurisdiction(false);
+    if (!isInsideBrazil(lat, lng)) {
+      setOutOfJurisdiction(true);
       setMapCenter([lat, lng]);
 
-      // 3. Map to Legacy Data (Adapter Pattern for UI compatibility)
+      // Create dummy legacy data for view (Out of BR)
       const legacyData: BriefingData = {
         productDescription: data.productDescription,
         contactMethod: data.contactMethod,
@@ -199,51 +185,83 @@ const App: React.FC = () => {
           country: data.geography.country || 'BR',
           lat, lng,
           level: data.geography.level,
-          municipioId: scan.ibgeCode,
-          selectedItems: [{
-            id: 'MainLocation',
-            shortName: data.geography.city.split(',')[0],
-            fullName: scan.geocode.data.displayName,
-            hierarchy: { municipality: data.geography.city.split(',')[0], state: '' },
-            coords: { lat, lng },
-            // Inject Real IBGE Data into the location object if available
-            ibgeData: scan.ibge.status === 'SUCCESS' && scan.ibge.data ? {
-              population: scan.ibge.data.population,
-              pib: 0,
-              averageIncome: scan.ibge.data.income || 0,
-              lastUpdate: '2022',
-              geocode: '0000000',
-              provenance: {
-                label: scan.ibge.provenance,
-                source: scan.ibge.sourceUrl || 'IBGE'
-              }
-            } : undefined
-          }]
+          selectedItems: [],
+          municipioId: scan.ibgeCode
         },
         objective: data.objective || null,
         geoSignals: scan.geoSignals
       };
-
       setBriefingData(legacyData);
+      setView(AppStep.DASHBOARD);
+      return;
+    }
 
-      // 4. Gemini Analysis (Gated)
-      if (isRealOnly) {
-        setLoadingStatus("Modo REAL_ONLY: Ignorando IA Gerativa...");
-        setAnalysis(null);
-      } else {
-        setLoadingStatus("Sincronizando Inteligência Gemini...");
-        const result = await analyzeBriefing(legacyData);
-        setAnalysis(result);
-      }
+    setOutOfJurisdiction(false);
+    setMapCenter([lat, lng]);
 
+    // 3. Map to Legacy Data (Adapter Pattern for UI compatibility)
+    const legacyData: BriefingData = {
+      productDescription: data.productDescription,
+      contactMethod: data.contactMethod,
+      usageDescription: data.usageDescription,
+      operationalModel: data.operationalModel || null,
+      dataSources: data.dataSources,
+      marketPositioning: data.marketPositioning || null,
+      targetGender: data.targetGender || null,
+      targetAge: data.targetAge,
+      geography: {
+        city: data.geography.city,
+        state: data.geography.state || [],
+        country: data.geography.country || 'BR',
+        lat, lng,
+        level: data.geography.level,
+        municipioId: scan.ibgeCode,
+        selectedItems: [{
+          id: 'MainLocation',
+          shortName: data.geography.city.split(',')[0],
+          fullName: scan.geocode.data.displayName,
+          hierarchy: { municipality: data.geography.city.split(',')[0], state: '' },
+          coords: { lat, lng },
+          // Inject Real IBGE Data into the location object if available
+          ibgeData: scan.ibge.status === 'SUCCESS' && scan.ibge.data ? {
+            population: scan.ibge.data.population,
+            pib: 0,
+            averageIncome: scan.ibge.data.income || 0,
+            lastUpdate: '2022',
+            geocode: '0000000',
+            provenance: {
+              label: scan.ibge.provenance,
+              source: scan.ibge.sourceUrl || 'IBGE'
+            }
+          } : undefined
+        }]
+      },
+      objective: data.objective || null,
+      geoSignals: scan.geoSignals
+    };
+
+    setBriefingData(legacyData);
+
+    // 4. Gemini Analysis (Gated)
+    if (isRealOnly) {
+      // setLoadingStatus ignorado se via preScan, mas processado em background
+      setAnalysis(null);
+    } else {
+      // setLoadingStatus("Sincronizando Inteligência Gemini..."); 
+      const result = await analyzeBriefing(legacyData);
+      setAnalysis(result);
+    }
+
+    // Se viemos do preScan, já estamos prontos, apenas trocamos a view
+    if (isInstant) {
+      setView(AppStep.DASHBOARD);
+      setDashboardView('COCKPIT');
+    } else {
+      // Legacy transition
       setTimeout(() => {
         setView(AppStep.DASHBOARD);
         setDashboardView('COCKPIT');
       }, 500);
-
-    } catch (e) {
-      console.error(e);
-      setLoadingStatus("Erro Crítico no Scan.");
     }
   };
 
