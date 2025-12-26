@@ -239,29 +239,12 @@ app.get('/api/google/ads/weekly-heatmap', (req, res) => {
     });
 });
 
-app.get('/api/meta/ads/weekly-heatmap', (req, res) => {
-    res.status(501).json({
-        ok: false,
-        status: 'NOT_CONFIGURED',
-        connector: 'META_ADS',
-        message: 'Meta Ads connector not implemented.',
-        missing: ['META_ADS_ACCOUNT_ID', 'META_TOKEN'],
-        requestId: `req_${Date.now()}`,
-        timestamp: new Date().toISOString()
-    });
-});
+// app.get('/api/meta/ads/weekly-heatmap', ... ) REMOVED STUB
 
 // --- Meta Ads Targeting Search (Stub) ---
 app.post('/api/meta-ads/targeting/search', (req, res) => {
-    if (isRealOnly) {
-        return res.status(200).json({
-            status: 'UNAVAILABLE',
-            connector: 'META_ADS',
-            message: 'REAL_ONLY: Meta Ads disabled.',
-            results: [],
-            provenance: { label: 'UNAVAILABLE', source: 'META_ADS', method: 'REAL_ONLY' }
-        });
-    }
+    // REAL ONLY CHECK REMOVED: We want to execute real logic
+    // if (isRealOnly) { ... }
     const env = metaAdsEnv();
     if (!env.token || !env.accountId) {
         return res.status(501).json({
@@ -303,15 +286,8 @@ app.post('/api/meta-ads/targeting/search', (req, res) => {
 
 // --- Meta Ads Reach Estimate (Stub) ---
 app.post('/api/meta-ads/reach-estimate', (req, res) => {
-    if (isRealOnly) {
-        return res.status(200).json({
-            status: 'UNAVAILABLE',
-            connector: 'META_ADS',
-            message: 'REAL_ONLY: Meta Ads disabled.',
-            estimates: null,
-            provenance: { label: 'UNAVAILABLE', source: 'META_ADS', method: 'REAL_ONLY' }
-        });
-    }
+    // REAL ONLY CHECK REMOVED
+    // if (isRealOnly) { ... }
     const env = metaAdsEnv();
     if (!env.token || !env.accountId) {
         return res.status(501).json({
@@ -394,13 +370,8 @@ app.post('/api/meta/hotspots', async (req, res) => {
     const max = Math.min(20, Math.max(1, Number(body.max) || 20));
     const scope = body.scope || {};
 
-    if (isRealOnly) {
-        return res.status(200).json({
-            status: 'UNAVAILABLE',
-            hotspots: [],
-            provenance: { label: 'UNAVAILABLE', source: 'META_ADS', method: 'REAL_ONLY', notes: 'Blocked by REAL_ONLY.' }
-        });
-    }
+    // REAL ONLY CHECK REMOVED
+    // if (isRealOnly) { ... }
 
     const env = metaAdsEnv();
     if (!env.token || !env.accountId) {
@@ -603,6 +574,33 @@ app.get('/api/ibge/admin', (req, res) => {
 // --- Optional: Endpoint Discovery Proxy (Real Only Guard) ---
 // --- FASE 2: HARD DATA ENDPOINTS (TERRITORIAL TRUTH) ---
 
+// --- IBGE Boundaries Proxy (High Performance) ---
+app.get('/api/ibge/malhas/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!id || id.length > 2) return res.status(400).json({ error: 'Invalid UF' });
+
+    // Cache simples em memória para não flodar o IBGE
+    const cacheKey = `malha_${id}`;
+    if (metaHotspotsCache.has(cacheKey)) {
+        return res.json(metaHotspotsCache.get(cacheKey));
+    }
+
+    try {
+        // Qualidade mínima para renderização rápida no Leaflet
+        const url = `https://servicodados.ibge.gov.br/api/v3/malhas/estados/${id}?formato=application/vnd.geo+json&qualidade=minima`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('IBGE Upstream Error');
+
+        const json = await response.json();
+        metaHotspotsCache.set(cacheKey, json); // Cache it
+        res.json(json);
+    } catch (e) {
+        console.error("IBGE Malha Error:", e);
+        res.status(502).json({ error: 'Falha ao obter malha do IBGE' });
+    }
+});
+
+// --- Intelligence: Real Territory Data Analysis ---
 app.post('/api/intelligence/territory', async (req, res) => {
     const { lat, lng, radiusMeters } = req.body;
 

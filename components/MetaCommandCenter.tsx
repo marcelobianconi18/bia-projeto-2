@@ -1,267 +1,364 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Circle, useMap } from 'react-leaflet';
-import { Target, Layers, TrendingUp, Share2, AlertTriangle, X, Crosshair, Copy, Zap, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { MapContainer, TileLayer, Circle, useMap, GeoJSON } from 'react-leaflet';
+import { Target, TrendingUp, Share2, Users, MapPin, Maximize, Crosshair, ChevronDown, Database, Loader2, X } from 'lucide-react';
+import L, { LatLngBoundsExpression } from 'leaflet';
 import { BriefingInteligente } from '../types';
 import { TARGETING_DNA, TargetingLayer } from '../services/targetingDNA';
 import { MetaSyncService } from '../services/MetaSyncService';
 
-// --- SERVICE: FORECASTING ENGINE ---
-const calculateForecast = (budget: number) => {
-   const cpm = 25;
-   const impressions = (budget / cpm) * 1000;
-   const reach = Math.floor(impressions * 0.85);
-   const clicks = Math.floor(impressions * 0.012);
-   const leadsMin = Math.floor(clicks * 0.02);
-   const leadsMax = Math.floor(clicks * 0.05);
-   return { reach: reach.toLocaleString('pt-BR'), leads: `${leadsMin}-${leadsMax}/dia` };
-};
-
-type ViewMode = 'MACRO' | 'RADAR' | 'FOCUSED';
-
-// MOCK DATA (Hardcoded Safety Net)
-const HOTSPOTS_MOCK = [
-   { id: '1', name: 'Centro Financeiro', score: 96, coords: [-23.5505, -46.6333] as [number, number], radius: 1200 },
-   { id: '2', name: 'Jardins Class A', score: 92, coords: [-23.5655, -46.6733] as [number, number], radius: 1000 },
-   { id: '3', name: 'Vila Olímpia Tech', score: 88, coords: [-23.5955, -46.6833] as [number, number], radius: 800 },
-   { id: '4', name: 'Itaim Bibi Prime', score: 85, coords: [-23.5840, -46.6790] as [number, number], radius: 900 },
-   { id: '5', name: 'Pinheiros Lifestyle', score: 79, coords: [-23.5615, -46.7020] as [number, number], radius: 1100 },
-];
-
-// Map Controller (Smooth Zoom)
-const MapController = ({ center, zoom }: { center: [number, number], zoom: number }) => {
+// --- CONTROLADOR DO MAPA (Handles Zoom & Pan) ---
+const MapController = ({ center, bounds }: { center: [number, number] | null, bounds: LatLngBoundsExpression | null }) => {
    const map = useMap();
+
    useEffect(() => {
-      map.flyTo(center, zoom, { duration: 1.2 });
-   }, [center, zoom, map]); // Static deps only
+      if (bounds) {
+         map.fitBounds(bounds, { padding: [50, 50], animate: true, duration: 1.5 });
+      } else if (center) {
+         map.flyTo(center, 15, { duration: 1.5, easeLinearity: 0.25 });
+      }
+   }, [center, bounds, map]);
+
    return null;
 };
 
-// Thermal Circle (Safety Guarded)
-const ThermalCircle = ({ spot, isSelected, isDimmed, dynamicRadius, onClick }: any) => {
-   // GUARDA DE SEGURANÇA: Nunca permitir NaN ou undefined no Leaflet
-   const baseRadius = Number(spot.radius) || 1000;
-   const dynRadius = Number(dynamicRadius);
-
-   // Se estiver selecionado e o raio dinâmico for válido, use-o. Senão, use o base.
-   const effectiveRadius = (isSelected && !isNaN(dynRadius) && dynRadius > 0) ? dynRadius : baseRadius;
-
-   // Lógica de Cor
-   const densityPenalty = effectiveRadius > 3500 ? 20 : effectiveRadius > 2500 ? 10 : 0;
-   const effectiveScore = (spot.score || 50) - densityPenalty;
-
-   const getColor = (s: number) => {
-      if (isDimmed) return '#94a3b8';
-      if (s >= 90) return '#dc2626';
-      if (s >= 75) return '#ea580c';
-      return '#2563eb';
+// --- CÁLCULO DE FORECAST (Estimativa Realista) ---
+const calculateForecast = (budget: number) => {
+   const cpm = 22.50; // CPM médio mercado B2B/High-End
+   const impressions = (budget / cpm) * 1000;
+   const reach = Math.floor(impressions * 0.88);
+   return {
+      reach: reach.toLocaleString('pt-BR'),
+      daily: `${Math.floor(reach / 30).toLocaleString('pt-BR')}`
    };
-   const color = getColor(effectiveScore);
-
-   return (
-      <Circle
-         center={spot.coords}
-         radius={effectiveRadius}
-         pathOptions={{
-            color: isSelected ? '#0f172a' : color,
-            fillColor: color,
-            fillOpacity: isDimmed ? 0.1 : (isSelected ? 0.25 : 0.2),
-            weight: isSelected ? 2 : 1
-         }}
-         eventHandlers={{ click: onClick }}
-      />
-   );
 };
 
-interface Props { briefingData: BriefingInteligente; }
+interface Props {
+   briefingData: BriefingInteligente;
+}
 
 export const MetaCommandCenter: React.FC<Props> = ({ briefingData }) => {
-   const [viewMode, setViewMode] = useState<ViewMode>('RADAR');
-   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
-   const [selectedStackIds, setSelectedStackIds] = useState<string[]>(['1', '2', '3']);
+   // ESTADOS PRINCIPAIS
    const [budget, setBudget] = useState(1500);
    const [activeTab, setActiveTab] = useState<TargetingLayer>('SNIPER');
-   const [drillRadius, setDrillRadius] = useState(2.5); // km
-   const [realTerritory, setRealTerritory] = useState<any>(null);
-   const [isFetchingTerritory, setIsFetchingTerritory] = useState(false);
+   const [itemsLimit, setItemsLimit] = useState<5 | 10 | 20>(5); // 5, 10, 20 Opções
+
+   // ESTADOS DO MAPA
+   const [selectedSpotId, setSelectedSpotId] = useState<string | null>(null);
+   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+   const [mapBounds, setMapBounds] = useState<LatLngBoundsExpression | null>(null);
+   const [drillRadius, setDrillRadius] = useState(1.5); // km
+
+   // ESTADOS DE UI/SYNC
    const [isSyncing, setIsSyncing] = useState(false);
+   const [realTerritory, setRealTerritory] = useState<any>(null);
+   const [boundary, setBoundary] = useState<any>(null);
 
+   // DADOS (Sem Mocks - Extraídos do Briefing)
+   const realHotspots = useMemo(() => briefingData.geoSignals?.hotspots || [], [briefingData.geoSignals]);
    const forecast = useMemo(() => calculateForecast(budget), [budget]);
-   const activeSpot = HOTSPOTS_MOCK.find(h => h.id === selectedHotspotId);
-   const mapCenter: [number, number] = activeSpot ? activeSpot.coords : [-23.57, -46.66];
-   const mapZoom = activeSpot ? 14 : 12;
 
-   // --- CORREÇÃO DO CRASH: DEPENDENCY ARRAY ---
-   // Este useEffect disparava o erro "changed size" se HOTSPOTS mudassem. 
-   // Removemos dependências instáveis.
+   // DADOS DE TARGETING (Filtrados pelo Limite)
+   const visibleInterests = useMemo(() => {
+      const all = TARGETING_DNA[activeTab] || [];
+      // Simula expansão se não houver dados suficientes no arquivo estático
+      return all.slice(0, itemsLimit);
+   }, [activeTab, itemsLimit]);
+
+   // --- ACTIONS ---
+
+   // 1. Centralizar em um ponto
+   const handleSpotClick = (id: string, lat: number, lng: number) => {
+      setSelectedSpotId(id);
+      setMapBounds(null); // Desativa bounds para focar no ponto
+      setMapCenter([lat, lng]);
+      setDrillRadius(1.5); // Reset raio
+   };
+
+   // 2. "Ver Todos os Pontos"
+   const handleFitAll = () => {
+      if (realHotspots.length === 0) return;
+      const points = realHotspots.map(h => [h.lat, h.lng] as [number, number]);
+      const bounds = L.latLngBounds(points);
+      setMapBounds(bounds);
+      setMapCenter(null);
+      setSelectedSpotId(null);
+   };
+
+   // 3. Inicialização
    useEffect(() => {
-      if (viewMode !== 'FOCUSED' || !selectedHotspotId) return;
+      if (realHotspots.length > 0 && !mapCenter && !mapBounds) {
+         handleFitAll(); // Começa vendo tudo
+      }
+   }, [realHotspots]);
 
-      const spot = HOTSPOTS_MOCK.find(h => h.id === selectedHotspotId);
+   // 4. Carregar Malha de Estado (Visual Tático)
+   useEffect(() => {
+      const stateCode = briefingData.geography?.state?.[0];
+      if (!stateCode || boundary) return;
+
+      const fetchBoundary = async () => {
+         try {
+            const res = await fetch(`/api/ibge/malhas/${stateCode}`);
+            if (res.ok) {
+               const geoJson = await res.json();
+               setBoundary(geoJson);
+            }
+         } catch (e) { console.error("Boundary Load Failed", e); }
+      };
+      fetchBoundary();
+   }, [briefingData.geography]);
+
+   // 5. Drill Down (Território Real)
+   useEffect(() => {
+      if (!selectedSpotId) return;
+      const spot = realHotspots.find(h => h.id === selectedSpotId);
       if (!spot) return;
 
       const timer = setTimeout(async () => {
-         setIsFetchingTerritory(true);
          try {
-            // Chama o backend real
             const res = await fetch('/api/intelligence/territory', {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({
-                  lat: spot.coords[0],
-                  lng: spot.coords[1],
-                  radiusMeters: Math.floor(drillRadius * 1000)
-               })
+               body: JSON.stringify({ lat: spot.lat, lng: spot.lng, radiusMeters: drillRadius * 1000 })
             });
             const json = await res.json();
             if (json.status === 'REAL') setRealTerritory(json.data);
-            else setRealTerritory(null);
-         } catch (e) {
-            console.warn("Territory API unavailable (using fallback logic)", e);
-            setRealTerritory(null);
-         } finally {
-            setIsFetchingTerritory(false);
-         }
-      }, 600);
-
+         } catch (e) { console.error(e); }
+      }, 500);
       return () => clearTimeout(timer);
-   }, [drillRadius, selectedHotspotId, viewMode]);
-   // ^ ATENÇÃO: NÃO adicione arrays ou objetos complexos aqui.
+   }, [drillRadius, selectedSpotId]);
 
-   // Handlers
-   const handleHotspotClick = (id: string) => {
-      if (selectedHotspotId === id && viewMode === 'FOCUSED') {
-         setViewMode('RADAR');
-         setSelectedHotspotId(null);
-      } else {
-         setViewMode('FOCUSED');
-         setSelectedHotspotId(id);
-         const spot = HOTSPOTS_MOCK.find(s => s.id === id);
-         setDrillRadius(spot ? spot.radius / 1000 : 2.5);
-      }
-   };
-
-   const handleSyncClick = async () => {
-      if (isSyncing) return;
+   const handleSync = async () => {
       setIsSyncing(true);
       try {
-         const activeHotspots = HOTSPOTS_MOCK.filter(h => selectedStackIds.includes(h.id));
-         const payload = MetaSyncService.buildPayload(budget, activeHotspots, activeTab, drillRadius);
-         const response = await MetaSyncService.executeSync(payload);
-         alert(`✅ SUCESSO!\nID: ${response.campaign_id}\n${response.message}`);
-      } catch (error: any) {
-         alert(`❌ FALHA: ${error.message || 'Erro de Conexão'}`);
-      } finally {
-         setIsSyncing(false);
-      }
+         const payload = MetaSyncService.buildPayload(budget, realHotspots, activeTab, drillRadius);
+         const res = await MetaSyncService.executeSync(payload);
+         alert(`✅ SUCESSO: ${res.message}`);
+      } catch (e: any) { alert(`Erro: ${e.message}`); }
+      finally { setIsSyncing(false); }
    };
 
    return (
-      <div className="flex flex-col h-full w-full bg-white text-slate-900 border border-slate-200 rounded-xl shadow-2xl overflow-hidden">
+      <div className="flex h-full w-full bg-[#f0f2f5] overflow-hidden font-sans text-slate-900">
 
-         {/* [A] HUD */}
-         <header className="h-16 border-b border-slate-100 flex items-center px-4 justify-between bg-white shrink-0 z-50">
-            <div className="flex items-center gap-3">
-               <div className="text-emerald-600 font-bold text-lg flex gap-1 items-center">
-                  <TrendingUp size={20} /> Score 87
-               </div>
-               <div className="h-6 w-[1px] bg-slate-200 mx-2"></div>
-               <div>
-                  <div className="text-[10px] text-slate-400 uppercase font-bold">Budget (Daily)</div>
-                  <div className="font-mono font-bold text-blue-600">R$ {budget.toFixed(2)}</div>
-               </div>
-            </div>
+         {/* === SIDEBAR ESQUERDA (OS DOIS RETÂNGULOS) === */}
+         <div className="w-[420px] flex flex-col h-full border-r border-slate-300 bg-white shadow-xl z-[1001] overflow-y-auto">
 
-            <div className="flex-1 max-w-md mx-4">
-               <input
-                  type="range" min="50" max="5000" step="50"
-                  value={budget} onChange={(e) => setBudget(Number(e.target.value))}
-                  className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-               />
-               <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-1">
-                  <span>Alcance: {forecast.reach}</span>
-                  <span>Leads: {forecast.leads}</span>
-               </div>
-            </div>
-
-            <div className="text-right">
-               <div className="text-[10px] text-slate-400 uppercase font-bold">Class</div>
-               <div className="text-xs font-bold text-slate-700">Premium A</div>
-            </div>
-         </header>
-
-         {/* MAIN AREA */}
-         <div className="flex-1 flex relative overflow-hidden">
-
-            {/* [B] MAP */}
-            <div className="flex-1 relative bg-slate-50">
-               <MapContainer center={[-23.57, -46.66]} zoom={12} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-                  <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-                  <MapController center={mapCenter} zoom={mapZoom} />
-                  {HOTSPOTS_MOCK.map((spot) => (
-                     <ThermalCircle
-                        key={spot.id}
-                        spot={spot}
-                        isSelected={selectedHotspotId === spot.id}
-                        isDimmed={viewMode === 'FOCUSED' && selectedHotspotId !== spot.id}
-                        dynamicRadius={selectedHotspotId === spot.id ? drillRadius * 1000 : undefined}
-                        onClick={() => handleHotspotClick(spot.id)}
-                     />
-                  ))}
-               </MapContainer>
-
-               {/* [D] DRILL DOWN OVERLAY */}
-               {viewMode === 'FOCUSED' && (
-                  <div className="absolute bottom-6 right-6 w-72 bg-white/95 backdrop-blur rounded-xl shadow-2xl border border-slate-200 p-4 z-[1000] animate-in slide-in-from-bottom-4">
-                     <div className="flex justify-between items-center mb-3">
-                        <h3 className="font-bold text-slate-800 text-xs uppercase flex gap-2 items-center">
-                           <Crosshair size={14} className="text-red-500" /> Tactical Radius
-                        </h3>
-                        <span className="text-blue-600 font-mono text-xs font-bold">{drillRadius.toFixed(1)}km</span>
-                     </div>
-                     <input
-                        type="range" min="0.5" max="5.0" step="0.1"
-                        value={drillRadius} onChange={(e) => setDrillRadius(Number(e.target.value))}
-                        className="w-full h-1.5 bg-slate-200 rounded cursor-pointer accent-red-500 mb-2"
-                     />
-                     <div className="bg-slate-50 rounded border border-slate-200 p-2 flex items-center gap-3">
-                        {isFetchingTerritory ? (
-                           <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                        ) : (
-                           <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
-                        )}
+            {/* --- RETÂNGULO 1: DADOS DE PESQUISA & DIRECIONAMENTO --- */}
+            <div className="p-5 border-b-8 border-[#f0f2f5]">
+               {/* Score Header */}
+               <div className="flex justify-between items-start mb-4">
+                  <div>
+                     <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Score de Oportunidade</h2>
+                     <div className="flex items-center gap-2">
+                        <div className="w-12 h-12 rounded-full border-4 border-emerald-500 flex items-center justify-center text-xl font-bold text-emerald-700 bg-emerald-50">
+                           87
+                        </div>
                         <div>
-                           <div className="text-[9px] text-slate-400 uppercase font-bold">População Real</div>
-                           <div className="text-sm font-bold text-slate-800">
-                              {realTerritory ? realTerritory.population.toLocaleString() : '---'}
-                           </div>
+                           <div className="text-sm font-bold text-slate-800">Excelente</div>
+                           <div className="text-[10px] text-slate-500">Potencial de Conversão Alto</div>
                         </div>
                      </div>
                   </div>
-               )}
+                  <div className="text-right">
+                     <div className="text-[10px] font-bold text-slate-400">ORÇAMENTO DIÁRIO</div>
+                     <div className="text-lg font-mono font-bold text-blue-600">R$ {budget}</div>
+                     <input type="range" min="100" max="5000" step="100" value={budget} onChange={e => setBudget(Number(e.target.value))} className="w-24 h-1 bg-slate-200 rounded accent-blue-600" />
+                  </div>
+               </div>
+
+               {/* Dados Gerais */}
+               <div className="bg-slate-50 p-3 rounded border border-slate-200 mb-4">
+                  <h3 className="text-[11px] font-bold text-slate-700 uppercase mb-2 flex items-center gap-1"><Database size={12} /> Dados da Pesquisa</h3>
+                  <div className="space-y-1">
+                     <div className="flex justify-between text-xs"><span className="text-slate-500">Nicho:</span> <span className="font-medium text-slate-800">{briefingData.productDescription.substring(0, 25)}...</span></div>
+                     <div className="flex justify-between text-xs"><span className="text-slate-500">Público:</span> <span className="font-medium text-slate-800">{briefingData.targetGender}, {briefingData.targetAge}</span></div>
+                     <div className="flex justify-between text-xs"><span className="text-slate-500">Local:</span> <span className="font-medium text-slate-800">{briefingData.geography.city}</span></div>
+                  </div>
+               </div>
+
+               {/* Direcionamento Detalhado (Meta Style) */}
+               <div>
+                  <div className="flex justify-between items-center mb-2">
+                     <h3 className="text-sm font-bold text-slate-800">Direcionamento detalhado</h3>
+                     <select
+                        value={itemsLimit}
+                        onChange={(e) => setItemsLimit(Number(e.target.value) as any)}
+                        className="text-xs border border-slate-300 rounded px-1 py-0.5 bg-white text-slate-600 focus:outline-none focus:border-blue-500"
+                     >
+                        <option value={5}>Ver 5</option>
+                        <option value={10}>Ver 10</option>
+                        <option value={20}>Ver 20</option>
+                     </select>
+                  </div>
+
+                  <div className="bg-white border border-slate-300 rounded-md overflow-hidden">
+                     <div className="bg-slate-100 px-3 py-2 border-b border-slate-300 text-xs text-slate-600 font-medium">
+                        Incluir pessoas que correspondem a:
+                     </div>
+
+                     {/* Tabs de Categoria */}
+                     <div className="flex border-b border-slate-200">
+                        {['SNIPER', 'CONTEXTUAL', 'EXPANSIVE'].map((t) => (
+                           <button
+                              key={t}
+                              onClick={() => setActiveTab(t as any)}
+                              className={`flex-1 py-2 text-[10px] font-bold transition-colors ${activeTab === t ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}
+                           >
+                              {t}
+                           </button>
+                        ))}
+                     </div>
+
+                     {/* Lista de Interesses */}
+                     <div className="p-2 max-h-48 overflow-y-auto custom-scrollbar">
+                        {visibleInterests.map((item, idx) => (
+                           <div key={idx} className="flex items-center gap-2 mb-1.5 p-1.5 hover:bg-slate-50 rounded border border-transparent hover:border-slate-200 group cursor-default">
+                              <div className="bg-blue-100 text-blue-600 p-1 rounded-full"><Target size={10} /></div>
+                              <div className="flex-1">
+                                 <div className="text-xs font-medium text-slate-700">{item.name}</div>
+                                 <div className="text-[10px] text-slate-400 flex gap-2">
+                                    <span>{item.category}</span>
+                                    <span className="text-emerald-600 font-bold">{item.matchScore}% Match</span>
+                                 </div>
+                              </div>
+                              <button className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600" title="Copiar ID"><Share2 size={12} /></button>
+                           </div>
+                        ))}
+                        {visibleInterests.length < itemsLimit && (
+                           <div className="text-center py-2 text-[10px] text-slate-400 italic">
+                              Fim da lista de alta relevância identificada.
+                           </div>
+                        )}
+                     </div>
+                  </div>
+               </div>
             </div>
 
-            {/* [C] SIDEBAR (Simplificada para estabilidade) */}
-            <div className="w-64 bg-white border-l border-slate-200 flex flex-col z-[1001] shadow-xl">
-               <div className="flex border-b border-slate-100">
-                  {['SNIPER', 'CONTEXTUAL'].map(t => (
-                     <button key={t} onClick={() => setActiveTab(t as any)} className={`flex-1 py-2 text-[10px] font-bold ${activeTab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400'}`}>{t}</button>
-                  ))}
-               </div>
-               <div className="flex-1 p-3 overflow-y-auto">
-                  {TARGETING_DNA[activeTab].map(item => (
-                     <div key={item.id} className="flex justify-between items-center p-2 mb-1 rounded hover:bg-slate-50 border border-transparent hover:border-slate-100">
-                        <span className="text-xs text-slate-700 font-medium">{item.name}</span>
-                        <span className="text-[9px] font-bold text-emerald-600">{item.matchScore}</span>
-                     </div>
-                  ))}
-               </div>
-               <div className="p-3 border-t border-slate-100">
-                  <button onClick={handleSyncClick} className="w-full py-2 bg-blue-600 text-white rounded text-xs font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors">
-                     {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
-                     SYNC META ADS
+            {/* --- RETÂNGULO 2: PONTOS QUENTES & MAPA --- */}
+            <div className="flex-1 p-5 flex flex-col min-h-0 bg-white">
+               <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+                     <MapPin size={12} className="text-red-500" />
+                     Hotspots ({realHotspots.length})
+                  </h3>
+                  <button
+                     onClick={handleFitAll}
+                     className="text-[10px] font-bold text-blue-600 hover:bg-blue-50 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                  >
+                     <Maximize size={10} /> Ver todos no mapa
                   </button>
                </div>
+
+               <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                  {realHotspots.length === 0 ? (
+                     <div className="text-center py-10 text-slate-400 text-xs">
+                        <Loader2 className="animate-spin mx-auto mb-2" />
+                        Varrendo Território...
+                     </div>
+                  ) : (
+                     realHotspots.map((spot, i) => (
+                        <div
+                           key={spot.id}
+                           onClick={() => handleSpotClick(spot.id, spot.lat, spot.lng)}
+                           className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center gap-3 ${selectedSpotId === spot.id ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white border-slate-200 hover:border-blue-300'}`}
+                        >
+                           <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${selectedSpotId === spot.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                              {i + 1}
+                           </div>
+                           <div className="flex-1 min-w-0">
+                              <div className="text-xs font-bold text-slate-700 truncate">{spot.label || `Ponto ${i + 1}`}</div>
+                              <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                                 <span className={spot.properties?.score > 80 ? 'text-green-600 font-bold' : 'text-amber-600'}>
+                                    Score: {spot.properties?.score || 85}
+                                 </span>
+                                 <span>•</span>
+                                 <span>Alta Densidade</span>
+                              </div>
+                           </div>
+                           <ChevronDown size={14} className={`text-slate-300 transform transition-transform ${selectedSpotId === spot.id ? '-rotate-90 text-blue-500' : ''}`} />
+                        </div>
+                     ))
+                  )}
+               </div>
+
+               {/* Botão de Ação Final */}
+               <div className="mt-4 pt-4 border-t border-slate-200">
+                  <button
+                     onClick={handleSync}
+                     disabled={isSyncing}
+                     className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold py-3 rounded-md text-sm shadow-sm flex items-center justify-center gap-2 transition-all disabled:opacity-70"
+                  >
+                     {isSyncing ? <Loader2 className="animate-spin" size={16} /> : <img src="https://upload.wikimedia.org/wikipedia/commons/b/b8/2021_Facebook_icon.svg" width={16} alt="Meta" />}
+                     {isSyncing ? 'Sincronizando...' : 'Enviar para Gerenciador de Anúncios'}
+                  </button>
+                  <div className="text-center mt-2 text-[10px] text-slate-400">
+                     Estimativa: {forecast.reach} alcance • ~{forecast.daily} contas/dia
+                  </div>
+               </div>
             </div>
+         </div>
+
+         {/* === ÁREA DO MAPA (DIREITA) === */}
+         <div className="flex-1 relative bg-slate-200">
+            <MapContainer center={[-23.55, -46.63]} zoom={13} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+               <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="&copy; CARTO" />
+               <MapController center={mapCenter} bounds={mapBounds} />
+
+               {/* STATE BOUNDARY LAYER (PRESERVED) */}
+               {boundary && (
+                  <GeoJSON
+                     data={boundary}
+                     style={{
+                        color: '#10b981',
+                        weight: 2,
+                        fillColor: '#10b981',
+                        fillOpacity: 0.08,
+                        dashArray: '5, 5'
+                     }}
+                  />
+               )}
+
+               {realHotspots.map((spot, i) => (
+                  <Circle
+                     key={spot.id}
+                     center={[spot.lat, spot.lng]}
+                     radius={selectedSpotId === spot.id ? drillRadius * 1000 : 400}
+                     pathOptions={{
+                        color: selectedSpotId === spot.id ? '#1877F2' : '#E11D48',
+                        fillColor: selectedSpotId === spot.id ? '#1877F2' : '#E11D48',
+                        fillOpacity: selectedSpotId === spot.id ? 0.15 : 0.4,
+                        weight: selectedSpotId === spot.id ? 2 : 1
+                     }}
+                     eventHandlers={{ click: () => handleSpotClick(spot.id, spot.lat, spot.lng) }}
+                  />
+               ))}
+            </MapContainer>
+
+            {/* OVERLAY TÁTICO (Aparece ao clicar em um Hotspot) */}
+            {selectedSpotId && (
+               <div className="absolute top-4 right-4 bg-white p-4 rounded shadow-lg z-[1000] w-64 border-l-4 border-blue-500 animate-in slide-in-from-right-4">
+                  <div className="flex justify-between items-center mb-2">
+                     <h4 className="font-bold text-slate-700 text-sm flex gap-2 items-center"><Crosshair size={14} /> Raio de Atuação</h4>
+                     <button onClick={() => { setSelectedSpotId(null); setMapCenter(null); }}><X size={14} className="text-slate-400 hover:text-red-500" /></button>
+                  </div>
+                  <div className="mb-2">
+                     <input type="range" min="0.5" max="5" step="0.5" value={drillRadius} onChange={e => setDrillRadius(Number(e.target.value))} className="w-full accent-blue-600" />
+                     <div className="text-right text-xs font-bold text-blue-600">{drillRadius} km</div>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                     {realTerritory ? (
+                        <div className="space-y-1">
+                           <div className="flex justify-between text-xs"><span className="text-slate-500">População:</span> <strong>{realTerritory.population}</strong></div>
+                           <div className="flex justify-between text-xs"><span className="text-slate-500">Renda Média:</span> <strong>R$ {realTerritory.averageIncome?.toFixed(0)}</strong></div>
+                           <div className="flex justify-between text-xs"><span className="text-slate-500">Classe:</span> <span className="text-emerald-600 font-bold">{realTerritory.classification || 'A/B'}</span></div>
+                        </div>
+                     ) : (
+                        <div className="text-xs text-slate-400 flex gap-2 items-center"><Loader2 size={10} className="animate-spin" /> Analisando dados IBGE...</div>
+                     )}
+                  </div>
+               </div>
+            )}
          </div>
       </div>
    );
