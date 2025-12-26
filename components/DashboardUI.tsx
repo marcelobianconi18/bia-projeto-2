@@ -6,6 +6,7 @@ import { ExplainabilityCard } from './ExplainabilityCard';
 import { WeeklyHeatmapWidget } from './WeeklyHeatmapWidget'; // New Widget
 import { Timeseries168Widget } from './Timeseries168Widget'; // Phase 3 Widget
 import L from 'leaflet';
+import { SystemHealthMonitor } from './SystemHealthMonitor';
 
 interface DashboardUIProps {
   settings: MapSettings;
@@ -137,7 +138,12 @@ Renda: ${realIbgeData?.income == null ? 'INDISPONÍVEL (IBGE)' : formatIntBR(rea
         </div>
       </div>
 
+
+
       <div className="absolute top-24 left-6 w-72 z-[1000] flex flex-col gap-4 pointer-events-none font-mono">
+        <div className="pointer-events-auto">
+          <SystemHealthMonitor />
+        </div>
         <div className="bg-surface2 rounded border border-app p-5 pointer-events-auto shadow-2xl">
           <h3 className="text-[10px] font-black text-accent uppercase tracking-widest mb-6 flex items-center gap-2">
             <SlidersHorizontal size={14} /> FILTRAGEM TÁTICA

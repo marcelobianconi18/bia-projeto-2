@@ -174,7 +174,7 @@ export interface MetaHotspot {
   };
   score: number | null;
   provenance: Provenance;
-  scope: { kind: 'CITY'|'STATE'|'COUNTRY'; city?: string; uf?: string; municipioId?: string };
+  scope: { kind: 'CITY' | 'STATE' | 'COUNTRY'; city?: string; uf?: string; municipioId?: string };
 }
 
 // =======================
@@ -402,6 +402,7 @@ export interface BriefingInteligente {
     level: GeographyScope;
   };
   objective: Objective | null;
+  totalBudget?: number; // Added for Targeting DNA logic
 }
 
 export interface BriefingData extends BriefingInteligente {

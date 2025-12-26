@@ -58,7 +58,10 @@ export const MetaCommandCenter: React.FC<MetaCommandCenterProps> = ({
 
    const targetingDNA = useMemo(() => {
       try {
-         return buildTargetingDNA(briefingData as BriefingData) as any;
+         // WIRING HARNESS: Connecting Real Data to Strategy Brain
+         const budget = briefingData.totalBudget || 5000; // Default to Simulation Scenario if not set
+         const score = analysis?.score || 50;
+         return buildTargetingDNA(briefingData as BriefingData, budget, score) as any;
       } catch (e) {
          console.warn('TargetingDNA generation failed, using fallback', e);
          return {
@@ -99,8 +102,8 @@ export const MetaCommandCenter: React.FC<MetaCommandCenterProps> = ({
                <div className="w-2 h-2 rounded-full bg-ok animate-pulse"></div>
             </div>
 
-           <div className="space-y-4 overflow-y-auto custom-scrollbar pr-2 flex-1">
-              <MetaAdsPanel briefingData={briefingData} />
+            <div className="space-y-4 overflow-y-auto custom-scrollbar pr-2 flex-1">
+               <MetaAdsPanel briefingData={briefingData} />
                {/* Targeting DNA Card */}
                <div className="bg-surface p-5 rounded-2xl border border-app relative group hover:border-accent transition-all">
                   <div className="flex items-start justify-between">
