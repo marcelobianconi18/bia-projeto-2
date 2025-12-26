@@ -52,7 +52,7 @@ export const HotspotsMapPanel: React.FC<HotspotsMapPanelProps> = ({ map, onNavig
         lat: (currentCenter?.lat || 0) + offsetLat,
         lng: (currentCenter?.lng || 0) + offsetLng,
         type: currentZoom > 10 ? 'Bairro' : currentZoom > 6 ? 'Cidade' : 'Macro-Região'
-        , provenance: { label: 'SIMULATED', source: 'Modelagem local', method: 'heurística' }
+        , provenance: { label: 'DERIVED', source: 'Modelagem local', method: 'heurística' }
       };
     });
   }, [currentCenter, currentZoom, isRealOnly]);

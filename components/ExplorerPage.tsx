@@ -104,6 +104,7 @@ export const ExplorerPage: React.FC<ExplorerPageProps> = ({
             setMapInstance={setMap}
             onSelectFeature={handleSelectFeature}
             cityName={cityName}
+            geoSignals={briefingData.geoSignals}
           />
           
           {selectedFeature && (

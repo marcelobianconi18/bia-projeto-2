@@ -23,7 +23,7 @@ export const HotspotsWidget: React.FC<{ onSelect?: (lat: number, lng: number) =>
       return;
     }
 
-    // Dynamic import to allow tree-shaking of SIMULATED data in production builds
+    // Dynamic import to allow tree-shaking of derived data in production builds
     import('../services/mocks/hotspots').then(mod => {
       setItems(mod.STATIC_HOTSPOTS);
     }).catch(err => {

@@ -11,7 +11,7 @@ export type DashboardView = 'COCKPIT' | 'EXPLORER' | 'COMMAND_CENTER';
 // GEO SIGNALS — CORE TYPES (Canonical)
 // =========================
 
-export type DataLabel = "REAL" | "PARTIAL_REAL" | "DERIVED" | "UNAVAILABLE";
+export type DataLabel = "REAL" | "PARTIAL_REAL" | "DERIVED" | "UNAVAILABLE" | "NOT_CONFIGURED";
 export type SourceSystem = "IBGE" | "OSM_NOMINATIM" | "OSM_OVERPASS" | "GOOGLE_ADS" | "GA4" | "SEARCH_CONSOLE" | "META_ADS" | "RFB" | "INTERNAL";
 
 export interface FetchAttempt {
@@ -116,7 +116,7 @@ export interface PolygonProperties {
   ibge_municipio_id?: string;
   ibge_setor_id?: string;
   name?: string;
-  adminLevel?: "municipio" | "setor" | "custom";
+  adminLevel?: "estado" | "municipio" | "setor" | "custom";
   population?: number | null;
   income?: number | null;
   targetAudienceEstimate?: number | null;
@@ -155,6 +155,26 @@ export interface GeoSignalHotspot {
   lat?: number;
   lng?: number;
   label?: string;
+}
+
+// Meta-specific Hotspot schema for API contract
+export interface MetaHotspot {
+  id: string;
+  rank: number;
+  name: string;
+  lat: number;
+  lng: number;
+  radiusMeters: number;
+  metrics: {
+    audience: number | null;
+    dailyReach: number | null;
+    dailyLeads: number | null;
+    shareOfLocalPopulation?: number | null;
+    localPopulation?: number | null;
+  };
+  score: number | null;
+  provenance: Provenance;
+  scope: { kind: 'CITY'|'STATE'|'COUNTRY'; city?: string; uf?: string; municipioId?: string };
 }
 
 // =======================
@@ -229,7 +249,7 @@ export interface GeoSignalsEnvelope {
 }
 
 // Connector Types
-export type ConnectorStatus = "OK" | "NOT_CONFIGURED" | "INVALID_REQUEST" | "UNAUTHORIZED" | "RATE_LIMITED" | "UPSTREAM_ERROR" | "UNAVAILABLE";
+export type ConnectorStatus = "REAL" | "NOT_CONFIGURED" | "UNAVAILABLE" | "ERROR";
 
 export interface ConnectorErrorResponse {
   ok: false;
@@ -244,13 +264,76 @@ export interface ConnectorErrorResponse {
 
 export interface ConnectorOkResponse<T> {
   ok: true;
-  status: "OK";
+  status: "REAL";
   connector: SourceSystem;
   data: T;
   provenance?: Provenance;
   requestId: string;
   timestamp: string;
 }
+
+export type MetaAdsPanelStatus = "REAL" | "NOT_CONFIGURED" | "UNAVAILABLE" | "ERROR";
+
+export type MetaAdsProvenanceSource = "META_ADS" | "GOOGLE" | "IBGE" | "RFB" | "BIA";
+
+export type MetaAdsProvenance = {
+  label: DataLabel;
+  source: MetaAdsProvenanceSource;
+  method?: string;
+  source_url?: string;
+  retrieved_at?: string;
+  notes?: string;
+  attempts?: Array<{ url: string; status?: number; ok?: boolean; error?: string }>;
+};
+
+export type MetaAdsConnectionMeta = {
+  connected: boolean;
+  accountId?: string;
+  businessId?: string;
+  pixelId?: string;
+  datasetId?: string;
+  lastVerifiedAt?: string;
+};
+
+export type MetaRefinement = {
+  kind: "INTEREST" | "BEHAVIOR" | "DEMOGRAPHIC";
+  name: string;
+  metaId?: string;
+  rationale: string;
+  provenance: MetaAdsProvenance;
+};
+
+export type MetaEstimates = {
+  audience_size?: { min?: number; max?: number; value?: number };
+  daily_reach?: { min?: number; max?: number; value?: number };
+  daily_leads?: { min?: number; max?: number; value?: number };
+  provenance: MetaAdsProvenance;
+};
+
+export type TerritoryContext = {
+  ibge?: { population?: number | null; income?: number | null; provenance: MetaAdsProvenance };
+  google?: { timeseries168?: any; provenance: MetaAdsProvenance };
+  rfb?: { poi_count?: number | null; categories?: Array<{ cnae: string; count: number }>; provenance: MetaAdsProvenance };
+};
+
+export type MetaAdsPanelPayload = {
+  status: MetaAdsPanelStatus;
+  connection: MetaAdsConnectionMeta;
+  baseTargeting: {
+    geo: any;
+    ageRanges: string[];
+    genders: string[];
+    objective: string;
+    operationalModel?: string;
+    positioning?: string;
+  };
+  tier: 5 | 10 | 20;
+  refinements: MetaRefinement[];
+  estimates: MetaEstimates;
+  territory: TerritoryContext;
+  exportPayload?: any;
+  provenance: MetaAdsProvenance;
+};
 
 // Legacy Config Interfaces (Kept for compatibility with existing UI components)
 export interface ConnectorConfigBase {
@@ -398,6 +481,7 @@ export interface ScanResult {
   timestamp: string;
   geocode: ConnectorResult<{ lat: number; lng: number; displayName: string; bounds: [number, number, number, number] }>;
   ibge: ConnectorResult<IbgeScanData>;
+  ibgeCode?: string;
   places: ConnectorResult<any>;
   metaAds: ConnectorResult<any>;
   rfb: ConnectorResult<any>;

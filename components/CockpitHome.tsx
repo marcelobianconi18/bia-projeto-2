@@ -201,6 +201,7 @@ Veredito: ${analysis?.verdict}
                         center={mapCenter}
                         settings={mapSettings}
                         cityName={cityName}
+                        geoSignals={briefingData.geoSignals}
                         realIbgeData={ibgeStats}
                      />
                 </div>

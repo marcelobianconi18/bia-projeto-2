@@ -25,6 +25,7 @@ import { PulseGraphWidget } from './PulseGraphWidget';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import { ExplainabilityCard } from './ExplainabilityCard';
 import L from 'leaflet';
+import { MetaAdsPanel } from './metaAds/MetaAdsPanel';
 
 interface MetaCommandCenterProps {
    briefingData: BriefingData;
@@ -98,7 +99,8 @@ export const MetaCommandCenter: React.FC<MetaCommandCenterProps> = ({
                <div className="w-2 h-2 rounded-full bg-ok animate-pulse"></div>
             </div>
 
-            <div className="space-y-4 overflow-y-auto custom-scrollbar pr-2 flex-1">
+           <div className="space-y-4 overflow-y-auto custom-scrollbar pr-2 flex-1">
+              <MetaAdsPanel briefingData={briefingData} />
                {/* Targeting DNA Card */}
                <div className="bg-surface p-5 rounded-2xl border border-app relative group hover:border-accent transition-all">
                   <div className="flex items-start justify-between">
@@ -182,7 +184,7 @@ export const MetaCommandCenter: React.FC<MetaCommandCenterProps> = ({
          </aside>
 
          {/* PAINEL CENTRAL DE COMANDO */}
-         <section className="flex-1 h-full flex flex-col gap-4">
+         <section className="flex-1 h-full min-h-0 flex flex-col gap-4">
             <div className="grid grid-cols-3 gap-4 shrink-0">
                <div className="bg-surface2 p-5 rounded-[24px] border border-app flex items-center gap-4">
                   <div className="bg-accent/10 p-3 rounded-2xl text-accent"><DollarSign size={24} /></div>
@@ -209,16 +211,16 @@ export const MetaCommandCenter: React.FC<MetaCommandCenterProps> = ({
 
             <div className="flex-1 min-h-[520px] bg-app rounded-[40px] border-4 border-app overflow-hidden relative shadow-2xl">
                <Suspense fallback={<div className="absolute inset-0 flex items-center justify-center text-muted2">Carregando mapa...</div>}>
-                  <div className="absolute inset-0">
-                     <BiaWarRoomMap
-                        center={mapCenter}
-                        settings={{ ...mapSettings, zoom: selectedHotspot ? 16 : 13, radius: selectedHotspot ? 500 : 2000, hideNoise: true }}
-                        hotspots={hotspots}
-                        selectedHotspotId={selectedHotspot?.id}
-                        setMapInstance={setMap}
-                        cityName={cityName}
-                     />
-                  </div>
+                  <BiaWarRoomMap
+                     className="h-full w-full"
+                     center={mapCenter}
+                     settings={{ ...mapSettings, zoom: selectedHotspot ? 16 : 13, radius: selectedHotspot ? 500 : 2000, hideNoise: true }}
+                     hotspots={hotspots}
+                     selectedHotspotId={selectedHotspot?.id}
+                     setMapInstance={setMap}
+                     cityName={cityName}
+                     geoSignals={briefingData.geoSignals}
+                  />
                </Suspense>
 
                {selectedHotspot && (

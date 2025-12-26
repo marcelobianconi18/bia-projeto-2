@@ -1,4 +1,18 @@
-# dependencies
+node_modules/
+dist/
+.vite/
+.env
+.env.local
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+coverage/
+*.local
+.vscode/
+.idea/
+*.log
+/.server/# dependencies
 node_modules/
 
 # build
@@ -19,6 +33,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.log
+
+# local diagnostics / runtime artifacts (never commit)
+teste_bia.sh
+teste_bia.out
+server/server.pid
 
 # coverage
 coverage/

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { BriefingInteligente, BriefingData, OperationalModel, MarketPositioning, TargetGender, AgeRange, DataSourcesConfig } from '../types';
 import {
   ArrowRight, CheckCircle, MapPin, Target, Users, Building2, Smartphone, Activity, Search, Loader2, Check,
-  Store, Bike, Truck, ShoppingBag, ShoppingCart, AlertCircle, Globe, Map, User, Heart, Coins, Gem, GraduationCap, ShieldCheck, Zap, MessageCircle, Eye, MousePointer2, Layers, FlaskConical
+  Store, Bike, Truck, ShoppingBag, ShoppingCart, AlertCircle, Globe, Map, User, Heart, Coins, Gem, GraduationCap, ShieldCheck, Zap, MessageCircle, Eye, MousePointer2, Layers
 } from 'lucide-react';
 import { geocodeCity } from '../services/connectors/osmGeocode';
 
@@ -49,8 +49,8 @@ const initialBriefing: BriefingData = {
   objective: null
 };
 
-export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onExplorerMode }) => {
-  const [step, setStep] = useState(0);
+export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete }) => {
+  const [step, setStep] = useState(1);
   const [data, setData] = useState<BriefingData>(initialBriefing);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [geoError, setGeoError] = useState('');
@@ -150,7 +150,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
   };
 
   const next = () => { if (validateStep()) setStep(prev => prev + 1); };
-  const back = () => setStep(prev => Math.max(0, prev - 1));
+  const back = () => setStep(prev => Math.max(1, prev - 1));
 
   const renderStep = () => {
     switch (step) {
@@ -398,54 +398,6 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
     }
   };
 
-  // Step 0: Welcome / Mode Selection Landing Page
-  if (step === 0) {
-    return (
-      <div className="min-h-screen bg-app flex flex-col items-center justify-center p-8 relative overflow-hidden select-none">
-        {/* Simple background decorations */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent/5 rounded-full blur-[120px] pointer-events-none"></div>
-
-        <div className="relative z-10 flex flex-col items-center max-w-4xl w-full animate-fade-in">
-          {/* Logo area */}
-          <h1 className="text-6xl font-black tracking-tighter text-app mb-6">bia.</h1>
-          <p className="text-muted text-sm font-medium mb-12 text-center max-w-md">
-            Bem-vindo ao centro de comando. Selecione sua interface de análise estratégica.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-            {/* Card 1: Piloto */}
-            <button
-              onClick={() => setStep(1)}
-              className="group relative h-[240px] rounded-[32px] bg-surface2 border-2 border-transparent hover:border-accent/50 hover:bg-surface transition-all duration-300 flex flex-col items-start justify-end p-8 text-left shadow-lg hover:shadow-2xl hover:shadow-accent/5"
-            >
-              <div className="absolute top-8 left-8 text-app mb-4">
-                <Zap size={32} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300 text-accent" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-app mb-1 group-hover:text-accent transition-colors">Modo Piloto</h3>
-                <p className="text-xs text-muted leading-relaxed max-w-[200px]">Fluxo assistido por IA para criação de estratégias completas.</p>
-              </div>
-            </button>
-
-            {/* Card 2: Noir Lab */}
-            <button
-              onClick={() => onExplorerMode && onExplorerMode()}
-              className="group relative h-[240px] rounded-[32px] bg-surface2 border-2 border-transparent hover:border-slate-400/50 hover:bg-surface transition-all duration-300 flex flex-col items-start justify-end p-8 text-left shadow-lg hover:shadow-2xl hover:shadow-slate-500/5"
-            >
-              <div className="absolute top-8 left-8 text-app mb-4">
-                <FlaskConical size={32} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300 text-slate-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-app mb-1 group-hover:text-slate-400 transition-colors">Laboratório Noir</h3>
-                <p className="text-xs text-muted leading-relaxed max-w-[200px]">Exploração livre de dados demográficos e geográficos.</p>
-              </div>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-app p-4 relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
@@ -464,7 +416,7 @@ export const BriefingWizard: React.FC<BriefingWizardProps> = ({ onComplete, onEx
           {renderStep()}
         </div>
         <div className="flex justify-between mt-8 pt-6 border-t border-app">
-          <button onClick={back} className="text-xs font-bold text-muted hover:text-app uppercase disabled:opacity-0">Voltar</button>
+          <button onClick={back} disabled={step <= 1} className="text-xs font-bold text-muted hover:text-app uppercase disabled:opacity-0">Voltar</button>
           {step < 9 && (
             <button onClick={next} disabled={!validateStep()} className="bg-accent hover:bg-accent/80 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg text-xs font-black uppercase flex items-center gap-2 transition-all">
               Continuar <ArrowRight size={14} />

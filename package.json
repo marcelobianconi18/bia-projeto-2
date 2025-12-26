@@ -12,7 +12,9 @@
     "dev": "vite",
     "build": "vite build",
     "review": "npm run build && npx serve dist",
-    "dev:server": "node server/index.js"
+    "dev:server": "node server/index.js",
+    "ibge:sectors": "node scripts/ibge-build-sectors.mjs",
+    "ibge:admin": "node scripts/ibge-build-admin.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.33.0",

@@ -46,8 +46,6 @@ const App: React.FC = () => {
 
   // Hotspots Inteligentes: Baseados na localidade real do briefing
   const hotspots = useMemo(() => {
-    if (isRealOnly) return []; // REAL_ONLY: sem hotspots simulados
-
     const geoHotspots = scanResult?.geoSignals?.hotspots;
     if (geoHotspots && geoHotspots.length > 0) {
       return geoHotspots
@@ -72,6 +70,28 @@ const App: React.FC = () => {
     const lng = briefingData.geography.lng || mapCenter[1];
     const level = briefingData.geography.level;
     const cityLabel = briefingData.geography.city.split(',')[0] || "Alvo";
+
+    // REAL_ONLY: sem hotspots simulados; se não houver hotspots reais/estáticos, evitar lista vazia com placeholder explícito.
+    if (isRealOnly) {
+      return [{
+        id: "real_only_placeholder",
+        point: { lat, lng },
+        properties: {
+          id: "real_only_placeholder",
+          kind: 'CUSTOM_PIN',
+          rank: 1,
+          name: "Base estática (IBGE) indisponível",
+          score: 0
+        },
+        provenance: { label: 'UNAVAILABLE', source: 'IBGE', method: 'real_only_placeholder' },
+        lat,
+        lng,
+        label: "Base estática (IBGE) indisponível",
+        rank: 1,
+        name: "Base estática (IBGE) indisponível",
+        score: 0
+      }];
+    }
 
     // Spread dinâmico
     const spread = level === 'city' ? 0.025 : level === 'state' ? 1.8 : 8;
