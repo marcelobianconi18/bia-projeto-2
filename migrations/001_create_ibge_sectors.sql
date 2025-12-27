@@ -1,5 +1,8 @@
 -- Migration: create ibge_sectors table and a helper stored procedure for hotspots
 
+-- Enable PostGIS
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 CREATE TABLE IF NOT EXISTS ibge_sectors (
   id TEXT PRIMARY KEY,
   population INTEGER,

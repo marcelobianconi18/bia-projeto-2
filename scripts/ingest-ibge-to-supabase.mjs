@@ -9,6 +9,13 @@
 */
 import fs from 'fs/promises';
 import { Client } from 'pg';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '../server/.env') });
 
 async function main() {
   const args = process.argv.slice(2);
@@ -36,9 +43,9 @@ async function main() {
   console.log(`Ingesting ${doc.features.length} features from ${geojsonPath}`);
   let inserted = 0;
   for (const f of doc.features) {
-    const id = f.properties?.id || f.properties?.codigo || f.id || null;
-    const population = f.properties?.population || f.properties?.pop || null;
-    const income = f.properties?.income || f.properties?.renda || null;
+    const id = f.properties?.id || f.properties?.codigo || f.properties?.CD_SETOR || f.id || null;
+    const population = f.properties?.population || f.properties?.pop || f.properties?.v0001 || null;
+    const income = f.properties?.income || f.properties?.renda || f.properties?.v0005 || null;
     const props = JSON.stringify(f.properties || {});
     const geom = JSON.stringify(f.geometry);
     if (!id) continue;
