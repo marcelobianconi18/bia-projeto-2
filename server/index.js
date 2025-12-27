@@ -661,8 +661,12 @@ app.post('/api/meta-ads/campaign-create', async (req, res) => {
     }
 
     try {
+        // Normalize Account ID (Remove act_ if present to avoid double prefix)
+        const rawId = String(env.accountId).replace(/^act_/, '');
+        const actId = `act_${rawId}`;
+
         // 1. Create Campaign
-        const campUrl = `https://graph.facebook.com/v20.0/act_${env.accountId}/campaigns`;
+        const campUrl = `https://graph.facebook.com/v20.0/${actId}/campaigns`;
         const campParams = new URLSearchParams({
             name: payload.name || 'BIA_Generated_Campaign',
             objective: 'OUTCOME_LEADS',
@@ -680,7 +684,7 @@ app.post('/api/meta-ads/campaign-create', async (req, res) => {
 
         // 2. Create AdSet (Targeting)
         // Simplificação: Criando AdSet 'Shell' com os dados geográficos
-        const adsetUrl = `https://graph.facebook.com/v20.0/act_${env.accountId}/adsets`;
+        const adsetUrl = `https://graph.facebook.com/v20.0/${actId}/adsets`;
 
         // Mapping BIA payload to Meta Graph API
         const adsetBody = new URLSearchParams({
