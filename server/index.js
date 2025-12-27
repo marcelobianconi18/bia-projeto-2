@@ -8,10 +8,11 @@ import { GoogleGenAI } from '@google/genai';
 import pg from 'pg';
 const { Pool } = pg;
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Explicitly load .env from the server directory
+dotenv.config({ path: join(__dirname, '.env') });
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
