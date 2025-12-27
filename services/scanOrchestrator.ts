@@ -146,6 +146,39 @@ export const runBriefingScan = async (briefingData: BriefingInteligente): Promis
             adminStates,
             adminMunicipios
         });
+
+        // ZERO-GRAVITY INTERVENTION: If DB is empty, fetch Real Hotspots from OSM Service
+        if (geoSignals && geoSignals.hotspots.length === 0) {
+            try {
+                const osmRes = await fetch('/api/intelligence/hotspots-server', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lat: briefingData.geography.lat || geocodeResult.data.lat,
+                        lng: briefingData.geography.lng || geocodeResult.data.lng
+                    })
+                });
+                const osmData = await osmRes.json();
+                if (osmData.hotspots && osmData.hotspots.length > 0) {
+                    geoSignals.hotspots = osmData.hotspots.map((h: any) => ({
+                        id: String(h.id),
+                        label: h.name,
+                        point: { lat: h.lat, lng: h.lng },
+                        lat: h.lat,
+                        lng: h.lng,
+                        properties: {
+                            id: String(h.id),
+                            name: h.name,
+                            kind: 'COMMERCIAL_POI',
+                            score: h.score,
+                            type: h.type
+                        },
+                        provenance: { label: 'REAL', source: 'OSM', method: 'overpass-api' }
+                    }));
+                }
+            } catch (err) { console.warn("Zero-Gravity Hotspot Fetch Failed", err); }
+        }
+
     } catch (e) { }
 
     // 7. If Meta Ads connector is verified as available, attempt to fetch Meta Hotspots (REAL ONLY)

@@ -399,6 +399,8 @@ export interface BriefingInteligente {
     state: string[];
     country: string;
     coords?: { lat: number; lng: number };
+    lat?: number;
+    lng?: number;
     level: GeographyScope;
   };
   objective: Objective | null;
