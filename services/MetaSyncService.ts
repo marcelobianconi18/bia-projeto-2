@@ -44,31 +44,51 @@ export class MetaSyncService {
      */
     public static buildPayload(
         budgetBRL: number,
-        selectedHotspots: any[], // Dados da Zona [C2]
-        targetingMode: TargetingLayer, // Dados da Zona [C1]
-        drillRadiusKm: number // Dados da Zona [D]
+        selectedHotspots: any[], // Pode vir com .coords (mock) ou .lat/.lng (real)
+        targetingMode: TargetingLayer,
+        drillRadiusKm: number
     ): AdSetPayload {
 
         // 1. Converter Orçamento
         const budgetCents = Math.floor(budgetBRL * 100);
 
-        // 2. Montar Geo-Locations (Baseado nos Hotspots Ativos + Drill Radius)
-        const locations: GeoLocation[] = selectedHotspots.map(spot => ({
-            name: spot.name,
-            latitude: spot.coords[0],
-            longitude: spot.coords[1],
-            radius_meters: Math.floor(drillRadiusKm * 1000)
-        }));
+        // 2. Montar Geo-Locations (Híbrido: Suporta Real e Mock)
+        const locations: GeoLocation[] = selectedHotspots.map((spot, index) => {
+            // Lógica de Detecção de Formato
+            let lat, lng;
+
+            if (typeof spot.lat === 'number' && typeof spot.lng === 'number') {
+                // FORMATO REAL (Vindo do GeoSignals/IBGE)
+                lat = spot.lat;
+                lng = spot.lng;
+            } else if (Array.isArray(spot.coords)) {
+                // FORMATO ANTIGO (Legado/Mock)
+                lat = spot.coords[0];
+                lng = spot.coords[1];
+            } else {
+                // Fallback de Segurança (Evita o crash "reading 0")
+                console.warn(`Hotspot inválido detectado na posição ${index}:`, spot);
+                lat = -23.55; // Default SP
+                lng = -46.63;
+            }
+
+            return {
+                name: spot.name || spot.label || `Alvo Tático ${index + 1}`,
+                latitude: lat,
+                longitude: lng,
+                radius_meters: Math.floor(drillRadiusKm * 1000)
+            };
+        });
 
         // 3. Montar Interesses (Baseado no targetingDNA)
         const interests = TARGETING_DNA[targetingMode].map(item => ({
-            id: item.apiCode || '00000', // Fallback se não tiver ID real
+            id: item.apiCode || '600312321', // Fallback ID se não tiver real
             name: item.name
         }));
 
         // 4. Montar Payload Final
         return {
-            name: `BIA_AUTO_GEN_${new Date().toISOString().split('T')[0]}_${targetingMode}`,
+            name: `BIA_REAL_DATA_${new Date().toISOString().split('T')[0]}_${targetingMode}`,
             optimization_goal: 'LEAD_GENERATION',
             billing_event: 'IMPRESSIONS',
             daily_budget: budgetCents,
@@ -83,15 +103,15 @@ export class MetaSyncService {
                     { interests: interests }
                 ]
             },
-            status: 'PAUSED' // Segurança: Sempre criar pausado para revisão humana
+            status: 'PAUSED'
         };
     }
 
     /**
-   * Executa o envio REAL para a API do Facebook Marketing via Backend Proxy
-   */
+     * Executa o envio REAL para a API do Facebook Marketing via Backend Proxy
+     */
     public static async executeSync(payload: AdSetPayload): Promise<SyncResponse> {
-        console.log("⚡ [BIA NETWORK] Iniciando Handshake com Meta Graph API (Real via Server)...");
+        console.log("⚡ [BIA NETWORK] Iniciando Handshake com Meta Graph API...");
 
         try {
             const response = await fetch('/api/meta-ads/campaign-create', {

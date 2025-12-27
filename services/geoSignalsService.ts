@@ -398,24 +398,9 @@ export const buildGeoSignalsWithOverlays = async (
                 label: `Hotspot ${index + 1}`
             };
         });
-    } else if (!IS_REAL_ONLY) {
-        const simulated = await generateHotspots(briefing, center, IS_REAL_ONLY);
-        hotspots = simulated.map((spot) => ({
-            id: `hotspot_${spot.id}`,
-            point: { lat: spot.lat, lng: spot.lng },
-            properties: {
-                id: `hotspot_${spot.id}`,
-                kind: 'HIGH_INTENT',
-                rank: spot.rank,
-                name: spot.name,
-                score: spot.score ?? null,
-                targetAudienceEstimate: spot.audience_total ?? null
-            },
-            provenance: spot.provenance,
-            lat: spot.lat,
-            lng: spot.lng,
-            label: spot.name
-        }));
+    } else {
+        // [KILL SWITCH] Simulation path removed.
+        console.warn("[GeoSignals] Simulation requested better real-only logic prevailed. Returning empty.");
     }
 
     const flows = buildDerivedFlows(center, IS_REAL_ONLY, briefing);

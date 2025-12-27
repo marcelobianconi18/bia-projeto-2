@@ -190,41 +190,11 @@ export async function generateHotspots(
         }];
     }
 
-    // OUTSIDE REAL_ONLY (Simulated Mode):
-    const spots: HotspotResult[] = [];
-    const count = 20;
-    const audienceBase = briefing.marketPositioning === 'Popular' ? 14000
-        : briefing.marketPositioning === 'CostBenefit' ? 12000
-            : briefing.marketPositioning === 'Premium' ? 9000
-                : briefing.marketPositioning === 'Luxury' ? 7000
-                    : 10000;
-    const genderWeight = briefing.targetGender && briefing.targetGender !== 'Mixed' ? 0.6 : 1;
-    const ageWeight = briefing.targetAge && briefing.targetAge.length > 0 ? 0.8 : 1;
-    const objectiveWeight = briefing.objective === 'DominateRegion' ? 1.15
-        : briefing.objective === 'ValidateIdea' ? 0.85
-            : 1;
+    // [KILL SWITCH EXECUTED] Simulation Logic Removed.
+    // This engine is disallowed from generating synthetic hotspots. 
+    // It must return empty or throw if real data is unavailable.
+    console.warn("[HotspotsEngine] Simulation Disabled. Returning empty set.");
+    return [];
 
-    for (let i = 0; i < count; i++) {
-        const angle = (i / count) * Math.PI * 2;
-        const radius = 0.02; // roughly 2km
 
-        spots.push({
-            id: i + 1,
-            rank: i + 1,
-            lat: center[0] + Math.cos(angle) * radius,
-            lng: center[1] + Math.sin(angle) * radius,
-            name: `Hotspot Simulado ${i + 1}`,
-            type: 'Cluster Demo',
-            score: 85 - i * 2,
-            audience_total: Math.max(1500, Math.round((audienceBase - i * 350) * genderWeight * ageWeight * objectiveWeight)),
-            provenance: {
-                label: 'DERIVED',
-                source: 'INTERNAL_MOCK',
-                method: 'Heuristic Ring',
-                notes: 'Dados simulados para demonstração.'
-            }
-        });
-    }
-
-    return spots;
 }

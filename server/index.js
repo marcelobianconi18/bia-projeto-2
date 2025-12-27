@@ -401,25 +401,8 @@ app.post('/api/meta/hotspots', async (req, res) => {
     // NOTE: Real implementation should call Meta Marketing API (Reach Estimate / Delivery Insights)
     // Here we do NOT fabricate numbers. If an operator wants to enable a local test fixture,
     // set META_HOTSPOTS_TEST=1 in the server env to return a deterministic sample for UI QA only.
-    if (process.env.META_HOTSPOTS_TEST === '1') {
-        // Generate deterministic sample hotspots from scope.center if provided, otherwise return empty.
-        const centerLat = body.briefing?.geography?.lat || -23.5505;
-        const centerLng = body.briefing?.geography?.lng || -46.6333;
-        const sample = Array.from({ length: max }, (_, i) => ({
-            id: `meta_hotspot_${i + 1}`,
-            rank: i + 1,
-            name: `META_HOTSPOT_${String(i + 1).padStart(2, '0')}`,
-            lat: centerLat + (Math.sin(i) * 0.01 * (i + 1)),
-            lng: centerLng + (Math.cos(i) * 0.01 * (i + 1)),
-            radiusMeters: Math.round(200 + (i / max) * (15000 - 200)),
-            metrics: { audience: 1000 + i * 500, dailyReach: 200 + i * 50, dailyLeads: 5 + i, shareOfLocalPopulation: null, localPopulation: null },
-            score: Math.max(1, Math.round(100 - i * (80 / max))),
-            provenance: { label: 'DERIVED', source: 'META_ADS', method: 'test-fixture', fetchedAt: new Date().toISOString() },
-            scope: { kind: (scope.kind || 'CITY'), city: scope.city }
-        }));
-        metaHotspotsCache.set(cacheKey, { ts: Date.now(), data: sample });
-        return res.json({ status: 'REAL', hotspots: sample, provenance: { label: 'DERIVED', source: 'META_ADS', method: 'test-fixture' } });
-    }
+    // [KILL SWITCH EXECUTED] Simulation Logic Removed.
+    // The system now demands a real Meta Marketing API implementation or returns HTTP 501.
 
     // Connector exists but feature not implemented on server.
     // Return honest UNAVAILABLE with provenance explaining the missing implementation.
