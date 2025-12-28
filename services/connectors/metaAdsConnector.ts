@@ -7,8 +7,7 @@ export interface MetaInterest {
     path?: string[];
 }
 
-// URL FIXA DO BACKEND
-const API_URL = 'http://localhost:3001';
+import { buildApiUrl } from '../apiConfig';
 
 export async function searchMetaInterests(query: string): Promise<MetaInterest[]> {
     if (!query || query.length < 2) return [];
@@ -25,7 +24,7 @@ export async function searchMetaInterests(query: string): Promise<MetaInterest[]
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-        const response = await fetch(`${API_URL}/api/meta/targeting-search?q=${encodeURIComponent(cleanQuery)}`, {
+        const response = await fetch(`${buildApiUrl('/api/meta/targeting-search')}?q=${encodeURIComponent(cleanQuery)}`, {
             signal: controller.signal
         });
 
@@ -56,7 +55,7 @@ export async function searchMetaInterests(query: string): Promise<MetaInterest[]
 
 export const verifyMetaAds = async () => {
     try {
-        await fetch(`${API_URL}/api/connectors/meta-ads/verify`, { method: 'HEAD' });
+        await fetch(buildApiUrl('/api/connectors/meta-ads/verify'), { method: 'HEAD' });
         return { status: 'ACTIVE' };
     } catch (e) {
         return { status: 'ERROR' };

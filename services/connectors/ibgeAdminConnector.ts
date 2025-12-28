@@ -1,6 +1,8 @@
+import { buildApiUrl } from '../apiConfig';
+
 export async function fetchIbgeAdmin(level: 'state' | 'municipio'): Promise<any | null> {
   try {
-    const response = await fetch(`http://localhost:3001/api/ibge/admin?level=${level}`);
+    const response = await fetch(buildApiUrl(`/api/ibge/admin?level=${level}`));
 
     if (!response.ok) {
       console.warn(`[IBGE Admin] Unavailable for ${level}: ${response.status}`);

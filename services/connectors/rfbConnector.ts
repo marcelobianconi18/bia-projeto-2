@@ -1,3 +1,4 @@
+import { buildApiUrl } from '../apiConfig';
 import { RfbConfig, ConnectorResult } from '../../types';
 
 export const verifyRfb = async (config: RfbConfig): Promise<ConnectorResult<any>> => {
@@ -6,7 +7,7 @@ export const verifyRfb = async (config: RfbConfig): Promise<ConnectorResult<any>
     }
 
     try {
-        const res = await fetch('http://localhost:3001/api/connectors/rfb/verify', {
+        const res = await fetch(buildApiUrl('/api/connectors/rfb/verify'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cnpj: config.cnpj })

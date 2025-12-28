@@ -1,12 +1,12 @@
 import { BriefingInteligente, GeoSignal } from '../types';
+import { buildApiUrl } from './apiConfig';
 
 /**
  * BIANCONI SCAN ORCHESTRATOR (v4.2 - FIXED PORT)
  * Orquestra a busca de inteligência conectando explicitamente ao Backend (Porta 3001).
  */
 
-// URL Base do Backend (Hardcoded para garantir conexão em desenvolvimento)
-const API_BASE = 'http://localhost:3001';
+
 
 export async function runBriefingScan(briefing: BriefingInteligente): Promise<BriefingInteligente> {
     console.log(`--- BIA ORCHESTRATOR v4.2 [${briefing.archetype}] ---`);
@@ -44,7 +44,7 @@ async function executeBackendScan(briefing: BriefingInteligente, locationQuery: 
     console.log(`📡 Solicitando Radar Tático para: ${locationQuery}...`);
 
     // CORREÇÃO AQUI: Usando API_BASE (localhost:3001)
-    const response = await fetch(`${API_BASE}/api/intelligence/hotspots-server`, {
+    const response = await fetch(buildApiUrl('/api/intelligence/hotspots-server'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -72,6 +72,7 @@ async function executeBackendScan(briefing: BriefingInteligente, locationQuery: 
                 radiusKm: briefing.archetype === 'LOCAL_BUSINESS' ? 5 : 50
             },
             bestSegments: ['Alta Afinidade', 'Público Qualificado'],
+            excludedSegments: [],
             competitorsFound: briefing.targeting.tribeReferences
         };
 
@@ -91,6 +92,7 @@ function injectFallbackData(briefing: BriefingInteligente) {
         hotspots: [],
         scannedArea: { lat: -23.5505, lng: -46.6333, radiusKm: 10 },
         bestSegments: [],
+        excludedSegments: [],
         competitorsFound: []
     };
 }

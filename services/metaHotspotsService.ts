@@ -1,3 +1,5 @@
+import { buildApiUrl } from "./apiConfig";
+
 const withTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 9000) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -12,7 +14,7 @@ const withTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 9
 
 export const fetchMetaHotspots = async (briefing: any, scope: any = {}, max = 20) => {
   try {
-    const { res, json } = await withTimeout('http://localhost:3001/api/meta/hotspots', {
+    const { res, json } = await withTimeout(buildApiUrl('/api/meta/hotspots'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ briefing, scope, max })

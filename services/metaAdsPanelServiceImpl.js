@@ -1,3 +1,5 @@
+import { buildApiUrl } from './apiConfig';
+
 const getEnv = () => {
   try {
     return (import.meta && import.meta.env) ? import.meta.env : {};
@@ -28,7 +30,7 @@ const withTimeout = async (url, options = {}, timeoutMs = 8000) => {
 
 const verifyMetaConnection = async () => {
   try {
-    const res = await withTimeout('http://localhost:3001/api/connectors/meta-ads/verify');
+    const res = await withTimeout(buildApiUrl('/api/connectors/meta-ads/verify'));
     const json = await res.json().catch(() => null);
     return { status: json?.status || (res.ok ? 'REAL' : 'UNAVAILABLE'), data: json, provenance: json?.provenance };
   } catch (err) {
@@ -38,7 +40,7 @@ const verifyMetaConnection = async () => {
 
 const metaTargetingSearch = async (query, kind) => {
   try {
-    const res = await withTimeout('http://localhost:3001/api/meta-ads/targeting/search', {
+    const res = await withTimeout(buildApiUrl('/api/meta-ads/targeting/search'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, kind })
@@ -52,7 +54,7 @@ const metaTargetingSearch = async (query, kind) => {
 
 const metaReachEstimate = async (payload) => {
   try {
-    const res = await withTimeout('http://localhost:3001/api/meta-ads/reach-estimate', {
+    const res = await withTimeout(buildApiUrl('/api/meta-ads/reach-estimate'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -256,7 +258,7 @@ const fetchGoogleTimeseries = async (briefingData) => {
     if (!regionId) {
       return { timeseries168: null, provenance: buildProvenance('UNAVAILABLE', 'GOOGLE', 'missing', undefined, 'Sem regionId') };
     }
-    const url = `/api/insights/timeseries168?source=GOOGLE_ADS&regionKind=MUNICIPIO&regionId=${encodeURIComponent(regionId)}&tz=America/Sao_Paulo&windowDays=28`;
+    const url = buildApiUrl(`/api/insights/timeseries168?source=GOOGLE_ADS&regionKind=MUNICIPIO&regionId=${encodeURIComponent(regionId)}&tz=America/Sao_Paulo&windowDays=28`);
     const res = await fetch(url);
     if (res.status === 501) {
       return { timeseries168: null, provenance: buildProvenance('NOT_CONFIGURED', 'GOOGLE', 'stub', undefined, 'Nao configurado') };
@@ -273,7 +275,7 @@ const fetchGoogleTimeseries = async (briefingData) => {
 
 const fetchRfbSummary = async () => {
   try {
-    const res = await fetch('/api/rfb/summary');
+    const res = await fetch(buildApiUrl('/api/rfb/summary'));
     if (res.status === 501) {
       return { poi_count: null, categories: [], provenance: buildProvenance('NOT_CONFIGURED', 'RFB', 'stub', undefined, 'RFB nao configurado') };
     }

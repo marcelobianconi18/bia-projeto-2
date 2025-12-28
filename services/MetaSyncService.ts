@@ -1,3 +1,4 @@
+import { buildApiUrl } from './apiConfig';
 import { TARGETING_DNA, TargetingLayer } from './targetingDNA';
 
 // Types alinhados com a Graph API v19.0
@@ -95,7 +96,7 @@ export class MetaSyncService {
     public static async executeSync(payload: AdSetPayload): Promise<any> {
         console.log("⚡ [BIA SYNC] Enviando Payload Real para Backend:", JSON.stringify(payload, null, 2));
 
-        const response = await fetch('http://localhost:3001/api/meta-ads/campaign-create', {
+        const response = await fetch(buildApiUrl('/api/meta-ads/campaign-create'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)

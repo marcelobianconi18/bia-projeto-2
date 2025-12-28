@@ -1,5 +1,6 @@
 
 // This file does not contain a leading markdown fence.
+import { buildApiUrl } from "./apiConfig";
 import { BriefingInteligente, Provenance } from "../types";
 
 export interface HotspotResult {
@@ -80,7 +81,7 @@ const tryBuildIbgeStaticHotspots = async (
     if (!municipioId) return null;
 
     // Local static cache/API (preloaded census bundle), no external network required.
-    const url = `http://localhost:3001/api/ibge/sectors?municipioId=${encodeURIComponent(municipioId)}&format=geojson`;
+    const url = buildApiUrl(`/api/ibge/sectors?municipioId=${encodeURIComponent(municipioId)}&format=geojson`);
     const { ok, status, json } = await fetchJsonWithTimeout(url, { method: 'GET' }, 2500);
     if (!ok || !json || json.type !== 'FeatureCollection' || !Array.isArray(json.features)) {
         console.warn(`[REAL_ONLY] IBGE static sectors unavailable for municipioId=${municipioId}`, status);

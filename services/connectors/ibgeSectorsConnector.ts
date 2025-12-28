@@ -1,9 +1,10 @@
 
+import { buildApiUrl } from "../apiConfig";
 import { IbgeOverlayBundle, Provenance } from "../../types";
 
 export async function fetchIbgeSectors(municipioId: string): Promise<IbgeOverlayBundle | null> {
     try {
-        const response = await fetch(`http://localhost:3001/api/ibge/sectors?municipioId=${municipioId}&format=geojson`);
+        const response = await fetch(buildApiUrl(`/api/ibge/sectors?municipioId=${municipioId}&format=geojson`));
 
         if (!response.ok) {
             console.warn(`[IBGE Sectors] Unavailable for ${municipioId}: ${response.status}`);

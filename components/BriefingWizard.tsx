@@ -47,9 +47,10 @@ const InstagramProfileSearch = ({
                 setResults(results);
                 setLoading(false);
 
-                // Opcional: Debug visual no console
+                // Debug visual no console
                 if (results.length === 0 && query.length > 3) {
                     console.log("⚠️ Nenhum resultado. Verifique se o Backend (Porta 3001) está rodando.");
+                    console.log("⚠️ Dica: Verifique VITE_API_BASE_URL se estiver em outro ambiente.");
                 }
             } else {
                 setResults([]);

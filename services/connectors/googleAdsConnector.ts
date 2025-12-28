@@ -1,3 +1,4 @@
+import { buildApiUrl } from '../apiConfig';
 import { GoogleAdsConfig, ConnectorResult } from '../../types';
 
 export const verifyGoogleAds = async (config: GoogleAdsConfig): Promise<ConnectorResult<any>> => {
@@ -13,7 +14,7 @@ export const verifyGoogleAds = async (config: GoogleAdsConfig): Promise<Connecto
 
     // 2. Client calls Server Stub. server stub says 501.
     try {
-        const res = await fetch('http://localhost:3001/api/connectors/google-ads/verify', {
+        const res = await fetch(buildApiUrl('/api/connectors/google-ads/verify'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
