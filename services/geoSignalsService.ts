@@ -9,8 +9,6 @@ import {
     IbgeOverlayBundle
 } from '../types';
 import { isRealOnly } from './env';
-import { generateHotspots } from './hotspotsEngine';
-
 const IS_REAL_ONLY = isRealOnly(); // Ensure it is called
 
 // Helper to create empty envelope

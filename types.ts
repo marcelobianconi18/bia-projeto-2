@@ -33,6 +33,7 @@ export interface BriefingInteligente {
     country?: string;
     state?: string;
     selectedItems?: any[];
+    coords?: { lat: number; lng: number }; // Added for compatibility
   };
 
   // Sinais de Inteligência (Hotspots) - Enriquecidos com Exclusão
@@ -56,6 +57,8 @@ export interface BriefingInteligente {
   contactMethod?: string;
 }
 
+export type BriefingData = BriefingInteligente;
+
 export interface GeoSignal {
   hotspots: Hotspot[];
   scannedArea: {
@@ -66,6 +69,8 @@ export interface GeoSignal {
   bestSegments: string[];    // Lista de Inclusão Sugerida
   excludedSegments: string[]; // Lista de Exclusão Sugerida (NOVO)
   competitorsFound: string[];
+  // Compatibility fields for complex envelope
+  polygons?: GeoSignalPolygon[];
 }
 
 export interface Hotspot {
@@ -80,9 +85,9 @@ export interface Hotspot {
   rank?: number;
   name?: string;
   provenance?: Provenance;
+  radiusMeters?: number; // Optional
+  coords?: [number, number]; // Optional
 }
-
-// --- MISSING TYPES ADDED ---
 
 export interface Provenance {
   label: string;
@@ -118,4 +123,114 @@ export interface IbgeOverlayBundle {
   sectors: any;
   stats: any;
   provenance: Provenance;
+}
+
+// --- ADVANCED GEO PROTOCOL V2 TYPES ---
+
+export interface GeoSignalPolygon {
+  type: 'Feature';
+  geometry: any;
+  properties: {
+    id: string;
+    kind: string;
+    name: string;
+    adminLevel: string;
+    population: number | null;
+    income: number | null;
+    targetAudienceEstimate: number | null;
+    score: number | null;
+    ibge_municipio_id?: string;
+    ibge_setor_id?: string;
+  };
+  provenance: Provenance;
+}
+
+export interface GeoSignalHotspot {
+  id: string;
+  point: { lat: number; lng: number };
+  lat: number;
+  lng: number;
+  label: string;
+  properties: any;
+  provenance: Provenance;
+}
+
+export interface GeoSignalFlow {
+  type: 'Feature';
+  geometry: any;
+  properties: any;
+  provenance: Provenance;
+}
+
+export interface Timeseries168h {
+  metric: string;
+  values: number[];
+}
+
+export interface WeeklyHeatmap {
+  day: string;
+  values: number[];
+}
+
+export interface GeoSignalsEnvelope {
+  version: string;
+  createdAt: string;
+  realOnly: boolean;
+  briefing: {
+    primaryCity: string;
+    ibge_municipio_id?: string;
+    dataSources?: any;
+  };
+  polygons: GeoSignalPolygon[];
+  hotspots: GeoSignalHotspot[];
+  flows: GeoSignalFlow[];
+  timeseries168h: Timeseries168h[];
+  timeseries: WeeklyHeatmap[];
+  warnings: any[];
+  meta: any;
+}
+
+// Tactical Map Types
+export interface TacticalFeature {
+  type: 'Feature';
+  geometry: {
+    type: 'Polygon';
+    coordinates: number[][][];
+  };
+  properties: {
+    id: number | string;
+    geocode: string;
+    income: number;
+    population: number;
+    volume: number; // 0-100
+    density: number; // 0-1
+    name: string;
+    provenance: Provenance | string; // Normalized to Provenance later
+  };
+}
+
+export interface TacticalGeoJson {
+  type: 'FeatureCollection';
+  features: TacticalFeature[];
+}
+
+export interface IbgeSocioData {
+  population: number;
+  pib: number;
+  averageIncome: number;
+  lastUpdate: string;
+  geocode: string;
+  provenance: Provenance;
+  populationYear?: number;
+  income?: number | null;
+}
+
+export interface GeminiAnalysis {
+  verdict: string;
+  action: string;
+  score: number;
+  confidence?: number;
+  reasons?: string[];
+  risks?: string[];
+  limitations?: string[];
 }

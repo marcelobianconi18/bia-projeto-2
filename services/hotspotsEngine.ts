@@ -1,3 +1,4 @@
+// @deprecated - Legacy engine. Prefer /api/intelligence/hotspots-server
 
 // This file does not contain a leading markdown fence.
 import { buildApiUrl } from "./apiConfig";
