@@ -1,14 +1,7 @@
-import express from 'express';
-import cors from 'cors';
-import axios from 'axios';
-import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-// --- CONFIGURAÇÃO DE AMBIENTE (ESM) ---
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-dotenv.config({ path: join(__dirname, '.env') });
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const axios = require('axios');
 
 const app = express();
 app.use(cors());
@@ -18,19 +11,6 @@ const PORT = 3001;
 const USER_AGENT = 'BianconiIntelligence/2.0';
 const CACHE = { geo: {} };
 
-// --- FUNÇÃO AUXILIAR: PONTO NO POLÍGONO (RAY CASTING) ---
-function isPointInPolygon(point, vs) {
-    var x = point[0], y = point[1];
-    var inside = false;
-    for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-        var xi = vs[i][0], yi = vs[i][1];
-        var xj = vs[j][0], yj = vs[j][1];
-        var intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-        if (intersect) inside = !inside;
-    }
-    return inside;
-}
-
 // --- ROTAS (API) ---
 
 app.all('/api/connectors/google-ads/verify', (req, res) => res.json({ status: 'ACTIVE' }));
@@ -38,104 +18,34 @@ app.all('/api/connectors/rfb/verify', (req, res) => res.json({ status: 'ACTIVE' 
 app.all('/api/connectors/meta-ads/verify', (req, res) => res.json({ status: 'ACTIVE' }));
 app.all('/api/ibge/admin', (req, res) => res.json({ status: 'ACTIVE', data: [] }));
 
-// 1. BUSCA INTELIGENTE (PÁGINAS / INTERESSES)
+// 1. BUSCA DE INTERESSES (BLINDADA)
 app.get('/api/meta/targeting-search', async (req, res) => {
-    let query = (req.query.q || '').trim();
-    if (!query) return res.json({ data: [] });
+    const query = (req.query.q || '').toLowerCase();
 
-    console.log(`🔎 [META SEARCH] Buscando: "${query}"`);
-
-    // Detecção de Intenção
-    const isHashtag = query.startsWith('#');
-    const isHandle = query.startsWith('@');
-
-    // Limpeza
-    query = query.replace(/^[@#]/, '');
-
-    // Se tiver token, usa API Real
-    if (process.env.META_TOKEN) {
-        try {
-            let results = [];
-
-            // ESTRATÉGIA A: BUSCAR PÁGINAS (Perfil Real)
-            // Usado para @handle ou busca por nome. Traz fotos reais e dados oficiais.
-            if (!isHashtag) {
-                const fields = 'name,username,fan_count,verification_status,picture{url}';
-                const pageUrl = `https://graph.facebook.com/v19.0/search?type=page&q=${encodeURIComponent(query)}&fields=${fields}&limit=5&locale=pt_BR&access_token=${process.env.META_TOKEN}`;
-
-                try {
-                    const pageRes = await axios.get(pageUrl);
-                    const pages = (pageRes.data.data || []).map(p => ({
-                        id: p.id,
-                        name: p.name,
-                        handle: `@${p.username || p.name.replace(/\s+/g, '').toLowerCase()}`,
-                        audience_size: p.fan_count,
-                        verified: p.verification_status === 'blue_verified',
-                        picture: p.picture?.data?.url,
-                        type: 'PAGE'
-                    }));
-                    results = [...results, ...pages];
-                } catch (err) {
-                    console.warn("⚠️ Meta Page Search Limitada:", err.message);
-                }
-            }
-
-            // ESTRATÉGIA B: BUSCAR INTERESSES (Targeting Puro)
-            // Usado para #hashtag ou complementar a busca de nomes.
-            if (results.length < 5 || isHashtag) {
-                const interestUrl = `https://graph.facebook.com/v19.0/search?type=adinterest&q=${encodeURIComponent(query)}&limit=7&locale=pt_BR&access_token=${process.env.META_TOKEN}`;
-                const interestRes = await axios.get(interestUrl);
-
-                const interests = (interestRes.data.data || []).map(i => ({
-                    id: i.id,
-                    name: i.name,
-                    handle: `#${i.name.replace(/\s+/g, '').toLowerCase()}`, // Simula hashtag
-                    audience_size: i.audience_size_lower_bound || i.audience_size,
-                    verified: (i.audience_size_lower_bound > 1000000), // Inferência de autoridade
-                    picture: null, // Interesse não tem foto
-                    type: 'INTEREST'
-                }));
-                results = [...results, ...interests];
-            }
-
-            return res.json({ data: results });
-
-        } catch (e) {
-            console.error("⚠️ Falha Geral Meta API:", e.message);
-            // Fallback para Mock se a API falhar (ex: Token inválido)
-        }
+    // Se não tiver token, retorna vazio educadamente (não erro 500)
+    if (!process.env.META_TOKEN) {
+        console.warn("⚠️ Token Meta ausente. Retornando lista vazia.");
+        return res.json([]);
     }
 
-    // MOCK (FALLBACK SEM TOKEN)
-    const mockHandle = `@${query.replace(/\s/g, '').toLowerCase()}`;
-    const mockResults = [
-        {
-            id: 'mock-1',
-            name: query,
-            handle: mockHandle,
-            audience_size: 45000 + Math.floor(Math.random() * 100000),
-            verified: false,
-            type: 'PAGE'
-        },
-        {
-            id: 'mock-2',
-            name: `${query} Oficial`,
-            handle: `${mockHandle}_oficial`,
-            audience_size: 1500000 + Math.floor(Math.random() * 2000000),
-            verified: true,
-            type: 'PAGE'
-        },
-        {
-            id: 'mock-3',
-            name: `Comunidade ${query}`,
-            handle: `#${query}lovers`,
-            audience_size: 15000,
-            verified: false,
-            type: 'INTEREST'
-        }
-    ];
+    try {
+        const url = `https://graph.facebook.com/v19.0/search?type=adinterest&q=${encodeURIComponent(query)}&limit=10&locale=pt_BR&access_token=${process.env.META_TOKEN}`;
+        const apiRes = await axios.get(url);
 
-    res.json({ data: mockResults });
+        if (apiRes.data && apiRes.data.data) {
+            const cleanData = apiRes.data.data.map(item => ({
+                id: item.id,
+                name: item.name,
+                audience_size: item.audience_size_lower_bound || item.audience_size
+            }));
+            return res.json(cleanData);
+        }
+        res.json([]);
+    } catch (e) {
+        // Se o Facebook der erro (Token inválido), loga e retorna vazio para não quebrar a UI
+        console.error("⚠️ Erro na API do Facebook:", e.response?.data?.error?.message || e.message);
+        res.json([]);
+    }
 });
 
 // 2. HOTSPOTS SERVER
@@ -147,140 +57,108 @@ app.post('/api/intelligence/hotspots-server', async (req, res) => {
 
         console.log(`📡 [BIA SERVER] Alvo: ${cityQuery}`);
 
-        if (['brasil', 'nacional', 'global', 'brazil'].includes(cityLower)) {
+        if (['brasil', 'nacional', 'global'].includes(cityLower)) {
             const CAPITALS = [
-                { lat: -23.5505, lng: -46.6333, label: 'São Paulo (SP)' },
-                { lat: -22.9068, lng: -43.1729, label: 'Rio de Janeiro (RJ)' },
-                { lat: -15.7975, lng: -47.8919, label: 'Brasília (DF)' },
-                { lat: -25.4284, lng: -49.2733, label: 'Curitiba (PR)' },
-                { lat: -30.0346, lng: -51.2177, label: 'Porto Alegre (RS)' },
-                { lat: -12.9777, lng: -38.5016, label: 'Salvador (BA)' }
+                { lat: -23.5505, lng: -46.6333, label: 'São Paulo' }, { lat: -22.9068, lng: -43.1729, label: 'Rio' },
+                { lat: -15.7975, lng: -47.8919, label: 'Brasília' }, { lat: -25.4284, lng: -49.2733, label: 'Curitiba' },
+                { lat: -30.0346, lng: -51.2177, label: 'Porto Alegre' }, { lat: -12.9777, lng: -38.5016, label: 'Salvador' }
             ];
             const center = { lat: -15.7975, lng: -47.8919 };
             return res.json({ status: 'success', data: { hotspots: CAPITALS.map((c, i) => ({ id: `m-${i}`, ...c, score: 90 })), center: [center.lat, center.lng] } });
         }
 
+        // Busca Local
         let geoData = CACHE.geo[cityLower];
         if (!geoData) {
             try {
-                const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityQuery)}&format=json&limit=1&polygon_geojson=1&countrycodes=br`;
+                const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityQuery)}&format=json&limit=1&countrycodes=br`;
                 const geoRes = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
-
                 if (geoRes.data?.[0]) {
-                    geoData = {
-                        lat: parseFloat(geoRes.data[0].lat),
-                        lng: parseFloat(geoRes.data[0].lon),
-                        geojson: geoRes.data[0].geojson
-                    };
+                    geoData = { lat: parseFloat(geoRes.data[0].lat), lng: parseFloat(geoRes.data[0].lon) };
                     CACHE.geo[cityLower] = geoData;
                 }
             } catch (e) { }
         }
 
-        if (!geoData) return res.status(404).json({ error: "Cidade não encontrada no Brasil." });
+        if (!geoData) return res.status(404).json({ error: "Local não encontrado." });
 
         const hotspots = [];
         const center = geoData;
-        let attempts = 0;
-
-        while (hotspots.length < 20 && attempts < 200) {
-            attempts++;
-            const angle = Math.random() * Math.PI * 2;
-            const dist = Math.random() * 0.05;
-            const pLat = center.lat + Math.cos(angle) * dist;
-            const pLng = center.lng + Math.sin(angle) * dist;
-
-            let isValid = true;
-            if (geoData.geojson && (geoData.geojson.type === 'Polygon' || geoData.geojson.type === 'MultiPolygon')) {
-                const polyCoords = geoData.geojson.type === 'MultiPolygon' ? geoData.geojson.coordinates[0][0] : geoData.geojson.coordinates[0];
-                isValid = isPointInPolygon([pLng, pLat], polyCoords);
-            }
-
-            if (isValid) {
-                hotspots.push({
-                    id: `h-${hotspots.length}`,
-                    lat: pLat,
-                    lng: pLng,
-                    label: `Zona Tática ${hotspots.length + 1}`,
-                    score: Math.floor(99 - (hotspots.length * 2)),
-                    properties: { renda: 4000 }
-                });
-            }
+        for (let i = 0; i < 20; i++) {
+            const angle = i * 2.4;
+            const dist = 0.008 + (0.002 * i);
+            hotspots.push({
+                id: `h-${i}`, lat: center.lat + Math.cos(angle) * dist, lng: center.lng + Math.sin(angle) * dist,
+                label: `Zona ${i + 1}`, score: 95 - i
+            });
         }
-
         res.json({ status: 'success', data: { hotspots, center: [center.lat, center.lng] } });
 
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// 3. DRILL DOWN (REAL)
-app.post('/api/intelligence/territory', async (req, res) => {
-    try {
-        const { lat, lng } = req.body;
-        const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
-        const osmRes = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
-
-        const addr = osmRes.data.address || {};
-        const local = addr.suburb || addr.neighbourhood || addr.city_district || 'Região Local';
-        const isRich = ['jardins', 'batel', 'leblon', 'centro', 'alphaville'].some(x => local.toLowerCase().includes(x));
-
-        res.json({
-            status: 'REAL',
-            data: {
-                population: 'Urban',
-                averageIncome: isRich ? 12000 : 4500,
-                locationName: `${local}, ${addr.city || ''}`
-            }
-        });
-    } catch (e) {
-        res.json({ status: 'REAL', data: { population: '---', averageIncome: 0 } });
-    }
-});
-
-// 4. META SYNC (REAL)
+// 3. META SYNC (CORRIGIDO: CAMPAIGN -> ADSET)
 app.post('/api/meta-ads/campaign-create', async (req, res) => {
-    // BLINDAGEM DE TOKEN
+    console.log("⚡ [META API] Iniciando criação em cadeia...");
+
     if (!process.env.META_TOKEN || !process.env.META_AD_ACCOUNT_ID) {
-        return res.status(400).json({
-            error: "MISSING_CONFIG",
-            message: "⚠️ Token da Meta não configurado no servidor (.env)"
-        });
+        return res.status(400).json({ message: "⚠️ Configure META_TOKEN e META_AD_ACCOUNT_ID no .env" });
     }
 
     try {
         const adAccountId = process.env.META_AD_ACCOUNT_ID.replace('act_', '');
-        const url = `https://graph.facebook.com/v19.0/act_${adAccountId}/campaigns`;
+        const token = process.env.META_TOKEN;
 
-        const payload = {
+        // PASSO 1: CAMPANHA
+        const campaignPayload = {
             name: req.body.name || "BIA Campaign",
             objective: "OUTCOME_TRAFFIC",
             status: "PAUSED",
             special_ad_categories: [],
-            access_token: process.env.META_TOKEN
+            access_token: token
         };
 
-        const fbRes = await axios.post(url, payload);
+        const campRes = await axios.post(`https://graph.facebook.com/v19.0/act_${adAccountId}/campaigns`, campaignPayload);
+        const campaignId = campRes.data.id;
 
-        console.log("✅ [META API] Sucesso Real:", fbRes.data);
-        res.json({
-            success: true,
-            campaign_id: fbRes.data.id,
-            message: "Campanha criada na Meta com sucesso!"
-        });
+        // PASSO 2: AD SET
+        const rawTargeting = req.body.targeting || {};
+        const sanitizedGeo = {
+            ...rawTargeting.geo_locations,
+            custom_locations: (rawTargeting.geo_locations?.custom_locations || []).map(loc => ({
+                latitude: loc.latitude, longitude: loc.longitude, radius: loc.radius, distance_unit: 'kilometer'
+            }))
+        };
+
+        const adSetPayload = {
+            name: "AdSet - " + (req.body.name || "BIA"),
+            campaign_id: campaignId,
+            optimization_goal: "LINK_CLICKS",
+            billing_event: "IMPRESSIONS",
+            bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+            daily_budget: req.body.daily_budget || 2000,
+            targeting: { ...rawTargeting, geo_locations: sanitizedGeo },
+            status: "PAUSED",
+            access_token: token
+        };
+
+        const adSetRes = await axios.post(`https://graph.facebook.com/v19.0/act_${adAccountId}/adsets`, adSetPayload);
+
+        res.json({ success: true, campaign_id: campaignId, adset_id: adSetRes.data.id, message: "Campanha criada!" });
 
     } catch (error) {
         const fbError = error.response?.data?.error;
-        console.error("❌ [META API] Falha:", fbError?.message || error.message);
-
-        // Retorna 400 para o Frontend exibir alert()
-        res.status(400).json({
-            error: "META_API_REJECTED",
-            message: fbError?.message || "Erro desconhecido na Meta API.",
-            details: fbError
-        });
+        console.error("❌ [META API FAIL]:", JSON.stringify(fbError, null, 2));
+        res.status(400).json({ message: `Erro Meta: ${fbError?.message}`, details: fbError });
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => console.log(`🦅 BIA SERVER REALITY (Porta ${PORT})`));
+app.post('/api/intelligence/territory', async (req, res) => {
+    try {
+        const url = `https://nominatim.openstreetmap.org/reverse?lat=${req.body.lat}&lon=${req.body.lng}&format=json`;
+        const r = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
+        res.json({ status: 'REAL', data: { locationName: r.data.display_name.split(',')[0], averageIncome: 4500, population: 'Densidade Alta' } });
+    } catch (e) { res.json({ status: 'REAL', data: { locationName: 'Local', averageIncome: 0 } }) }
+});
+
+app.listen(PORT, () => console.log(`🦅 BIA SERVER FIXED (Porta ${PORT})`));

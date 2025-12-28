@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Target, ArrowRight, MapPin, Search, Store, Globe, Megaphone, CheckCircle, Loader2, ShieldAlert, BadgeCheck, X, Instagram, Hash } from 'lucide-react';
 import { BriefingInteligente } from '../types';
 import { runBriefingScan } from '../services/scanOrchestrator';
+import { searchMetaInterests } from '../services/connectors/metaAdsConnector';
 
 // Estado Inicial Robusto
 const INITIAL_BRIEFING: BriefingInteligente = {
@@ -38,21 +39,22 @@ const InstagramProfileSearch = ({
 
     // Debounce Search
     useEffect(() => {
-        if (query.length < 2) { setResults([]); return; }
-
         const timer = setTimeout(async () => {
-            setLoading(true);
-            try {
-                // Passa a query exata (pode ser #hashtag, @handle ou nome)
-                const res = await fetch(`/api/meta/targeting-search?q=${encodeURIComponent(query)}`);
-                const json = await res.json();
-                setResults(json.data || []);
-            } catch (e) {
-                console.error(e);
-            } finally {
+            if (query.length >= 2) {
+                setLoading(true);
+                const results = await searchMetaInterests(query);
+
+                setResults(results);
                 setLoading(false);
+
+                // Opcional: Debug visual no console
+                if (results.length === 0 && query.length > 3) {
+                    console.log("⚠️ Nenhum resultado. Verifique se o Backend (Porta 3001) está rodando.");
+                }
+            } else {
+                setResults([]);
             }
-        }, 400); // 400ms delay
+        }, 400); // 400ms debounce
         return () => clearTimeout(timer);
     }, [query]);
 
