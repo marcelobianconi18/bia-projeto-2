@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Circle, useMap, Marker, Popup } from 'react-leaflet';
-import { Target, TrendingUp, Share2, MapPin, Maximize, Crosshair, ChevronDown, Database, Loader2, Search, Zap, UserCheck, ShieldAlert } from 'lucide-react';
+import { MapContainer, TileLayer, Circle, useMap, Marker } from 'react-leaflet';
+import { Target, TrendingUp, MapPin, Maximize, Crosshair, ChevronDown, Loader2, UserCheck, Zap, Share2 } from 'lucide-react';
 import L, { LatLngBoundsExpression } from 'leaflet';
 import { BriefingInteligente } from '../types';
 import { TARGETING_DNA, TargetingLayer } from '../services/targetingDNA';
@@ -11,58 +11,46 @@ const MapController = ({ center, bounds }: { center: [number, number] | null, bo
    const map = useMap();
    useEffect(() => {
       if (bounds) {
-         map.fitBounds(bounds, { padding: [50, 50], animate: true, duration: 1.5 });
+         console.log("🗺️ [MAPA] Ajustando foco para cobrir área tática...");
+         map.fitBounds(bounds, { padding: [50, 50], animate: true, duration: 2 });
       } else if (center) {
-         map.flyTo(center, 14, { duration: 1.5, easeLinearity: 0.25 });
+         console.log("🗺️ [MAPA] Voando para centro:", center);
+         map.flyTo(center, 13, { duration: 2, easeLinearity: 0.5 });
       }
    }, [center, bounds, map]);
    return null;
 };
 
-// --- ICONE PERSONALIZADO ---
 const targetIcon = new L.Icon({
    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-   iconSize: [25, 41],
-   iconAnchor: [12, 41],
-   popupAnchor: [1, -34],
-   shadowSize: [41, 41]
+   iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
 });
 
-interface Props {
-   briefingData: BriefingInteligente;
-}
+interface Props { briefingData: BriefingInteligente; }
 
 export const MetaCommandCenter: React.FC<Props> = ({ briefingData }) => {
-   // ESTADOS
-   // Inicializa orçamento com valor do briefing ou default
-   const initialBudget = briefingData.financials?.monthlyBudget
-      ? Math.floor(briefingData.financials.monthlyBudget / 30)
-      : 50;
-
+   // Initial States
+   const initialBudget = briefingData.financials?.monthlyBudget ? Math.floor(briefingData.financials.monthlyBudget / 30) : 50;
    const [dailyBudget, setDailyBudget] = useState(initialBudget);
    const [durationDays, setDurationDays] = useState(7);
-
    const [activeTab, setActiveTab] = useState<TargetingLayer>('SNIPER');
    const [itemsLimit, setItemsLimit] = useState<5 | 10 | 20>(5);
 
-   // MAPA
+   // Map States
    const [selectedSpotId, setSelectedSpotId] = useState<string | null>(null);
    const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
    const [mapBounds, setMapBounds] = useState<LatLngBoundsExpression | null>(null);
    const [drillRadius, setDrillRadius] = useState(briefingData.geography?.radius || 2);
 
-   // DADOS REAIS
+   // Data States
    const [isSyncing, setIsSyncing] = useState(false);
    const [realTerritory, setRealTerritory] = useState<any>(null);
-
    const realHotspots = useMemo(() => briefingData.geoSignals?.hotspots || [], [briefingData.geoSignals]);
 
-   // Cálculos Financeiros
    const totalInvest = dailyBudget * durationDays;
-   const estimatedReach = Math.floor((totalInvest / 25) * 1000 * 0.8); // CPM R$25 est.
+   const estimatedReach = Math.floor((totalInvest / 25) * 1000 * 0.8);
 
-   // Mapping de Abas (Tradução Visual)
    const tabLabels: Record<string, { label: string, desc: string, icon: any }> = {
       'EXPANSIVE': { label: 'DADOS DEMOGRÁFICOS', desc: 'Idade, Gênero, Localização e Renda', icon: UserCheck },
       'SNIPER': { label: 'INTERESSES', desc: 'Afinidades, Hobbies e Marcas', icon: Target },
@@ -72,272 +60,172 @@ export const MetaCommandCenter: React.FC<Props> = ({ briefingData }) => {
    // --- ACTIONS ---
    const handleSpotClick = (id: string, lat: number, lng: number) => {
       setSelectedSpotId(id);
-      setMapBounds(null);
       setMapCenter([lat, lng]);
-      // Não reseta o raio aqui para manter a persistência se o user já mexeu
+      setMapBounds(null); // Release bounds to allow focus
    };
 
    const handleFitAll = () => {
       if (realHotspots.length === 0) return;
       const points = realHotspots.map(h => [h.lat, h.lng] as [number, number]);
-      const bounds = L.latLngBounds(points);
-      setMapBounds(bounds);
-      setMapCenter(null);
-      setSelectedSpotId(null);
+      if (points.length > 0) {
+         const bounds = L.latLngBounds(points);
+         setMapBounds(bounds);
+         setMapCenter(null);
+         setSelectedSpotId(null);
+      }
    };
 
+   // CORREÇÃO CRÍTICA: Forçar atualização do mapa quando os dados mudam (ex: SP -> Londrina)
    useEffect(() => {
-      if (realHotspots.length > 0 && !mapCenter && !mapBounds) {
+      if (realHotspots.length > 0) {
          handleFitAll();
       }
-   }, [realHotspots]);
+   }, [realHotspots]); // Sempre que os hotspots mudarem, recalcula o zoom.
 
-   // Drill Down Real
+   // Drill Down Logic
    useEffect(() => {
       if (!selectedSpotId) return;
       const spot = realHotspots.find(h => h.id === selectedSpotId);
       if (!spot) return;
 
+      setRealTerritory(null); // Reset anterior
       const fetchIntel = async () => {
          try {
             const res = await fetch('/api/intelligence/territory', {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ lat: spot.lat, lng: spot.lng, radiusMeters: drillRadius * 1000 })
+               body: JSON.stringify({ lat: spot.lat, lng: spot.lng })
             });
             const json = await res.json();
             if (json.status === 'REAL') setRealTerritory(json.data);
          } catch (e) { console.error(e); }
       };
       fetchIntel();
-   }, [drillRadius, selectedSpotId]);
+   }, [selectedSpotId]);
 
    const handleSync = async () => {
       setIsSyncing(true);
       try {
          const payload = MetaSyncService.buildPayload(totalInvest, realHotspots, activeTab, drillRadius);
          const res = await MetaSyncService.executeSync(payload);
-         alert(`✅ SUCESSO REAL (META API):\n${res.message}\nCampaign ID: ${res.campaign_id}`);
-      } catch (e: any) { alert(`Erro na Sincronização: ${e.message}`); }
-      finally { setIsSyncing(false); }
+         alert(`✅ SUCESSO REAL:\nCampanha criada: ${res.campaign_id}`);
+      } catch (e: any) {
+         alert(`❌ FALHA NA SINCRONIZAÇÃO:\n${e.message || "Erro de conexão"}`);
+      } finally { setIsSyncing(false); }
    };
-
-   const currentTabInfo = tabLabels[activeTab] || tabLabels['SNIPER'];
 
    return (
       <div className="flex flex-col h-full w-full bg-[#f0f2f5] overflow-hidden font-sans text-slate-900 border border-slate-300 rounded-xl shadow-2xl">
-
-         {/* === CORPO PRINCIPAL === */}
          <div className="flex flex-1 overflow-hidden">
-
-            {/* SIDEBAR TÁTICA (ESQUERDA) */}
+            {/* SIDEBAR */}
             <div className="w-[400px] bg-white border-r border-slate-300 flex flex-col z-[1001] shadow-lg overflow-y-auto custom-scrollbar">
-
-               {/* 1. CONTROLE ORÇAMENTÁRIO (Movido para cá) */}
+               {/* 1. ORÇAMENTO */}
                <div className="p-5 border-b border-slate-200 bg-slate-50">
-                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                     <TrendingUp size={14} /> Planejamento Financeiro
-                  </h3>
-
-                  {/* Input Diário */}
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2"><TrendingUp size={14} /> Planejamento Financeiro</h3>
                   <div className="mb-4">
-                     <div className="flex justify-between text-sm mb-1">
-                        <span className="font-semibold text-slate-700">Orçamento Diário</span>
-                        <span className="font-mono font-bold text-blue-600">R$ {dailyBudget}</span>
-                     </div>
-                     <input
-                        type="number"
-                        value={dailyBudget}
-                        onChange={(e) => setDailyBudget(Number(e.target.value))}
-                        className="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 focus:outline-none"
-                     />
+                     <div className="flex justify-between text-sm mb-1"><span className="font-semibold text-slate-700">Orçamento Diário</span><span className="font-mono font-bold text-blue-600">R$ {dailyBudget}</span></div>
+                     <input type="number" value={dailyBudget} onChange={(e) => setDailyBudget(Number(e.target.value))} className="w-full p-2 border border-slate-300 rounded text-sm" />
                   </div>
-
-                  {/* Slider Duração */}
                   <div className="mb-4">
-                     <div className="flex justify-between text-sm mb-1">
-                        <span className="font-semibold text-slate-700">Duração</span>
-                        <span className="font-bold text-slate-900">{durationDays} dias</span>
-                     </div>
-                     <input
-                        type="range" min="1" max="30" step="1"
-                        value={durationDays} onChange={e => setDurationDays(Number(e.target.value))}
-                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                     />
+                     <div className="flex justify-between text-sm mb-1"><span className="font-semibold text-slate-700">Duração</span><span className="font-bold text-slate-900">{durationDays} dias</span></div>
+                     <input type="range" min="1" max="30" step="1" value={durationDays} onChange={e => setDurationDays(Number(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
                   </div>
-
-                  {/* Resumo Calculado */}
                   <div className="bg-white border border-slate-200 rounded p-3 flex justify-between items-center shadow-sm">
-                     <div>
-                        <div className="text-[10px] text-slate-400 uppercase font-bold">Investimento Total</div>
-                        <div className="text-lg font-bold text-slate-800">R$ {totalInvest.toLocaleString('pt-BR')}</div>
-                     </div>
-                     <div className="text-right">
-                        <div className="text-[10px] text-slate-400 uppercase font-bold">Alcance Est.</div>
-                        <div className="text-sm font-bold text-emerald-600">~{estimatedReach.toLocaleString('pt-BR')}</div>
-                     </div>
+                     <div><div className="text-[10px] text-slate-400 uppercase font-bold">Total</div><div className="text-lg font-bold text-slate-800">R$ {totalInvest.toLocaleString('pt-BR')}</div></div>
+                     <div className="text-right"><div className="text-[10px] text-slate-400 uppercase font-bold">Alcance</div><div className="text-sm font-bold text-emerald-600">~{estimatedReach.toLocaleString('pt-BR')}</div></div>
                   </div>
                </div>
 
-               {/* 2. SEGMENTAÇÃO (Renomeada) */}
+               {/* 2. SEGMENTAÇÃO */}
                <div className="flex-1 flex flex-col min-h-0">
-                  {/* Tabs */}
                   <div className="flex border-b border-slate-200 bg-white">
                      {Object.keys(tabLabels).map((key) => {
-                        const info = tabLabels[key];
-                        const isActive = activeTab === key;
-                        const Icon = info.icon;
+                        const info = tabLabels[key]; const isActive = activeTab === key; const Icon = info.icon;
                         return (
-                           <button
-                              key={key}
-                              onClick={() => setActiveTab(key as any)}
-                              className={`flex-1 py-3 px-1 flex flex-col items-center gap-1 transition-colors border-b-2 ${isActive ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                           >
-                              <Icon size={16} />
-                              <span className="text-[9px] font-bold uppercase">{info.label}</span>
+                           <button key={key} onClick={() => setActiveTab(key as any)} className={`flex-1 py-3 px-1 flex flex-col items-center gap-1 border-b-2 ${isActive ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                              <Icon size={16} /><span className="text-[9px] font-bold uppercase">{info.label}</span>
                            </button>
                         );
                      })}
                   </div>
-
-                  {/* Descrição da Aba Ativa */}
-                  <div className="bg-slate-100 px-4 py-2 border-b border-slate-200">
-                     <p className="text-xs text-slate-600 italic">{currentTabInfo.desc}</p>
-                  </div>
-
-                  {/* Lista de Itens */}
                   <div className="p-4 overflow-y-auto">
                      <div className="flex justify-between items-center mb-2">
                         <h4 className="text-xs font-bold text-slate-700">Critérios de Inclusão</h4>
-                        <select
-                           value={itemsLimit} onChange={(e) => setItemsLimit(Number(e.target.value) as any)}
-                           className="text-[10px] border rounded px-1 py-0.5 bg-white"
-                        >
-                           <option value={5}>Top 5</option>
-                           <option value={10}>Top 10</option>
-                           <option value={20}>Top 20</option>
-                        </select>
+                        <select value={itemsLimit} onChange={(e) => setItemsLimit(Number(e.target.value) as any)} className="text-[10px] border rounded px-1 py-0.5 bg-white"><option value={5}>Top 5</option><option value={10}>Top 10</option><option value={20}>Top 20</option></select>
                      </div>
-
                      <div className="space-y-2">
                         {(TARGETING_DNA[activeTab] || []).slice(0, itemsLimit).map((item, idx) => (
-                           <div key={idx} className="flex items-center gap-3 p-2 bg-white border border-slate-200 rounded hover:border-blue-400 transition-colors group cursor-default">
+                           <div key={idx} className="flex items-center gap-3 p-2 bg-white border border-slate-200 rounded hover:border-blue-400 transition-colors group">
                               <div className="w-1 h-8 bg-blue-500 rounded-full"></div>
-                              <div className="flex-1">
-                                 <div className="text-xs font-bold text-slate-800">{item.name}</div>
-                                 <div className="text-[10px] text-slate-500">{item.category} • <span className="text-emerald-600 font-bold">{item.matchScore}% Relevância</span></div>
-                              </div>
-                              <Share2 size={14} className="text-slate-300 opacity-0 group-hover:opacity-100 cursor-pointer hover:text-blue-600" />
+                              <div className="flex-1"><div className="text-xs font-bold text-slate-800">{item.name}</div><div className="text-[10px] text-slate-500">{item.category}</div></div>
                            </div>
                         ))}
                      </div>
                   </div>
                </div>
 
-               {/* 3. HOTSPOTS LIST (Garanta 20 itens) */}
+               {/* 3. HOTSPOTS */}
                <div className="border-t border-slate-200 bg-white flex flex-col h-1/3">
                   <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                     <h3 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-2">
-                        <MapPin size={12} className="text-red-500" />
-                        Pontos Quentes ({realHotspots.length})
-                     </h3>
+                     <h3 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-2"><MapPin size={12} className="text-blue-500" /> Pontos Quentes ({realHotspots.length})</h3>
                      <button onClick={handleFitAll} className="text-[10px] text-blue-600 hover:underline flex items-center gap-1"><Maximize size={10} /> Ver Todos</button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
                      {realHotspots.map((spot, i) => (
-                        <div
-                           key={spot.id}
-                           onClick={() => handleSpotClick(spot.id, spot.lat, spot.lng)}
-                           className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-all border ${selectedSpotId === spot.id ? 'bg-blue-50 border-blue-500' : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-200'}`}
-                        >
-                           <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedSpotId === spot.id ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>{i + 1}</div>
-                           <div className="flex-1 truncate text-xs font-medium text-slate-700">{spot.label || `Zona ${i + 1}`}</div>
-                           <div className="text-[10px] font-bold text-emerald-600">{spot.score || 90} pts</div>
+                        <div key={spot.id} onClick={() => handleSpotClick(spot.id, spot.lat, spot.lng)} className={`flex items-center gap-3 p-2 rounded cursor-pointer border ${selectedSpotId === spot.id ? 'bg-blue-50 border-blue-500' : 'bg-white border-transparent hover:bg-slate-50'}`}>
+                           <div className="w-5 h-5 bg-slate-200 rounded-full flex items-center justify-center text-[10px] font-bold text-slate-600">{i + 1}</div>
+                           <div className="flex-1 truncate text-xs font-medium text-slate-700">{spot.label}</div>
+                           <div className="text-[10px] font-bold text-emerald-600">{spot.score || 90}</div>
                         </div>
                      ))}
                   </div>
                </div>
 
-               {/* AÇÃO FINAL */}
                <div className="p-4 border-t border-slate-200 bg-white">
-                  <button
-                     onClick={handleSync} disabled={isSyncing}
-                     className="w-full py-3 bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold rounded shadow-md text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-70"
-                  >
+                  <button onClick={handleSync} disabled={isSyncing} className="w-full py-3 bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold rounded shadow-md text-sm flex items-center justify-center gap-2 disabled:opacity-70">
                      {isSyncing ? <Loader2 className="animate-spin" size={16} /> : <img src="https://upload.wikimedia.org/wikipedia/commons/b/b8/2021_Facebook_icon.svg" width={16} alt="Meta" />}
-                     {isSyncing ? 'Sincronizando...' : 'Enviar para Gerenciador de Anúncios'}
+                     {isSyncing ? 'Conectando...' : 'Sincronizar com Meta Ads'}
                   </button>
                </div>
             </div>
 
-            {/* MAPA (DIREITA) */}
+            {/* MAPA */}
             <div className="flex-1 relative bg-slate-100">
-               <MapContainer center={[-15.7, -47.9]} zoom={4} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+               <MapContainer center={[-23.55, -46.63]} zoom={4} style={{ height: '100%', width: '100%' }} zoomControl={false}>
                   <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="&copy; CARTO" />
                   <MapController center={mapCenter} bounds={mapBounds} />
-
-                  {realHotspots.map((spot) => {
-                     // LÓGICA DE COR CORRIGIDA (SEM VERMELHO)
-                     const isSelected = selectedSpotId === spot.id;
-                     const isHighScore = (spot.score || 90) > 80;
-
-                     // Cor base: Se selecionado = Azul Meta (#1877F2). Se não e High Score = Verde (#10B981). Senão = Amarelo (#F59E0B).
-                     const color = isSelected ? '#1877F2' : (isHighScore ? '#10B981' : '#F59E0B');
-
-                     return (
-                        <React.Fragment key={spot.id}>
-                           <Circle
-                              center={[spot.lat, spot.lng]}
-                              radius={isSelected ? drillRadius * 1000 : (spot.radiusMeters || 800)}
-                              pathOptions={{
-                                 color: color,
-                                 fillColor: color,
-                                 fillOpacity: isSelected ? 0.15 : 0.3, // Mais transparente se não selecionado
-                                 weight: isSelected ? 2 : 1
-                              }}
-                              eventHandlers={{ click: () => handleSpotClick(spot.id, spot.lat, spot.lng) }}
-                           />
-                           {/* Marker central apenas se selecionado para não poluir */}
-                           {isSelected && <Marker position={[spot.lat, spot.lng]} icon={targetIcon} />}
-                        </React.Fragment>
-                     );
-                  })}
+                  {realHotspots.map((spot) => (
+                     <React.Fragment key={spot.id}>
+                        <Circle
+                           center={[spot.lat, spot.lng]}
+                           radius={selectedSpotId === spot.id ? drillRadius * 1000 : (spot.radiusMeters || 800)}
+                           pathOptions={{ color: selectedSpotId === spot.id ? '#1877F2' : '#10B981', fillColor: selectedSpotId === spot.id ? '#1877F2' : '#10B981', fillOpacity: 0.2 }}
+                           eventHandlers={{ click: () => handleSpotClick(spot.id, spot.lat, spot.lng) }}
+                        />
+                        {selectedSpotId === spot.id && <Marker position={[spot.lat, spot.lng]} icon={targetIcon} />}
+                     </React.Fragment>
+                  ))}
                </MapContainer>
 
-               {/* OVERLAY TÁTICO (Drill Down) */}
+               {/* DRILL DOWN CARD */}
                {selectedSpotId && (
-                  <div className="absolute top-4 right-4 w-72 bg-white/95 backdrop-blur p-4 rounded shadow-xl border-l-4 border-blue-600 z-[1000] animate-in slide-in-from-right-4">
+                  <div className="absolute top-4 right-4 w-72 bg-white/95 backdrop-blur p-4 rounded shadow-xl border-l-4 border-blue-600 z-[1000]">
                      <div className="flex justify-between items-center mb-3">
                         <h4 className="font-bold text-slate-800 text-xs uppercase flex gap-2"><Crosshair size={14} /> Raio Tático</h4>
                         <button onClick={() => { setSelectedSpotId(null); setMapCenter(null); }}><ChevronDown size={14} className="rotate-180" /></button>
                      </div>
-
                      <div className="mb-4">
-                        <div className="flex justify-between text-xs mb-1 font-bold text-blue-600">
-                           <span>Alcance: {drillRadius} km</span>
-                        </div>
+                        <div className="flex justify-between text-xs mb-1 font-bold text-blue-600"><span>Alcance: {drillRadius} km</span></div>
                         <input type="range" min="1" max="50" step="1" value={drillRadius} onChange={e => setDrillRadius(Number(e.target.value))} className="w-full h-1 bg-slate-200 rounded accent-blue-600" />
                      </div>
-
                      <div className="bg-slate-50 p-3 rounded border border-slate-100 space-y-2">
                         {realTerritory ? (
                            <>
-                              <div className="flex justify-between text-xs border-b border-slate-200 pb-1">
-                                 <span className="text-slate-500">Local:</span>
-                                 <strong className="text-right truncate w-32">{realTerritory.locationName}</strong>
-                              </div>
-                              <div className="flex justify-between text-xs border-b border-slate-200 pb-1">
-                                 <span className="text-slate-500">Renda Média:</span>
-                                 <strong className="text-emerald-600">R$ {realTerritory.averageIncome?.toLocaleString()}</strong>
-                              </div>
-                              <div className="flex justify-between text-xs">
-                                 <span className="text-slate-500">Densidade:</span>
-                                 <strong>{realTerritory.population}</strong>
-                              </div>
+                              <div className="flex justify-between text-xs border-b border-slate-200 pb-1"><span className="text-slate-500">Local:</span> <strong className="text-right truncate w-32">{realTerritory.locationName}</strong></div>
+                              <div className="flex justify-between text-xs border-b border-slate-200 pb-1"><span className="text-slate-500">Renda Média:</span> <strong className="text-emerald-600">R$ {realTerritory.averageIncome?.toLocaleString()}</strong></div>
+                              <div className="flex justify-between text-xs"><span className="text-slate-500">Densidade:</span> <strong>{realTerritory.population}</strong></div>
                            </>
-                        ) : (
-                           <div className="flex items-center gap-2 text-xs text-slate-400 py-2"><Loader2 size={12} className="animate-spin" /> Triangulando satélites...</div>
-                        )}
+                        ) : <div className="flex items-center gap-2 text-xs text-slate-400 py-2"><Loader2 size={12} className="animate-spin" /> Analisando terreno...</div>}
                      </div>
                   </div>
                )}

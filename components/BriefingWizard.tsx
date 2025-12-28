@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Target, ArrowRight, MapPin, Search, Store, Globe, Megaphone, CheckCircle, AlertTriangle, Loader2, ShieldAlert, BadgeCheck, XCircle } from 'lucide-react';
+import { Target, ArrowRight, MapPin, Search, Store, Globe, Megaphone, CheckCircle, Loader2, ShieldAlert, BadgeCheck, X, Instagram, Hash } from 'lucide-react';
 import { BriefingInteligente } from '../types';
 import { runBriefingScan } from '../services/scanOrchestrator';
 
@@ -17,14 +17,18 @@ interface Props {
     onComplete: (data: BriefingInteligente) => void;
 }
 
-// COMPONENTE HELPER: AUTOCOMPLETE (Live Targeting)
-const InterestAutocomplete = ({
+// COMPONENTE: INSTAGRAM PROFILE SEARCH
+const InstagramProfileSearch = ({
     placeholder,
-    onSelect,
+    onAdd,
+    currentCount,
+    maxLimit = 10,
     variant = 'positive'
 }: {
     placeholder: string,
-    onSelect: (val: string) => void,
+    onAdd: (val: string) => void,
+    currentCount: number,
+    maxLimit?: number,
     variant?: 'positive' | 'negative'
 }) => {
     const [query, setQuery] = useState('');
@@ -39,7 +43,8 @@ const InterestAutocomplete = ({
         const timer = setTimeout(async () => {
             setLoading(true);
             try {
-                const res = await fetch(`/api/meta/targeting-search?q=${query}`);
+                // Passa a query exata (pode ser #hashtag, @handle ou nome)
+                const res = await fetch(`/api/meta/targeting-search?q=${encodeURIComponent(query)}`);
                 const json = await res.json();
                 setResults(json.data || []);
             } catch (e) {
@@ -47,7 +52,7 @@ const InterestAutocomplete = ({
             } finally {
                 setLoading(false);
             }
-        }, 300);
+        }, 400); // 400ms delay
         return () => clearTimeout(timer);
     }, [query]);
 
@@ -63,13 +68,18 @@ const InterestAutocomplete = ({
     }, []);
 
     const handleSelect = (item: any) => {
-        onSelect(item.name);
+        if (currentCount >= maxLimit) {
+            alert(`Limite de ${maxLimit} perfis atingido.`);
+            return;
+        }
+        // Save format uses handle for UI consistency
+        onAdd(item.handle || item.name);
         setQuery('');
         setResults([]);
     };
 
-    // Formata números (ex: 1500000 -> 1.5M)
     const formatSize = (n: number) => {
+        if (!n) return '?';
         if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
         if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
         return n;
@@ -77,33 +87,55 @@ const InterestAutocomplete = ({
 
     return (
         <div className="relative flex-1" ref={wrapperRef}>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+                <Instagram size={20} className={variant === 'positive' ? 'text-pink-600' : 'text-slate-400'} />
                 <input
-                    className={`flex-1 p-2 border rounded text-sm outline-none focus:ring-2 ${variant === 'positive' ? 'focus:ring-emerald-200 border-slate-300' : 'focus:ring-red-200 border-slate-300'}`}
+                    className={`flex-1 p-3 border rounded-lg text-sm outline-none focus:ring-2 transition-all ${variant === 'positive' ? 'focus:ring-pink-200 border-pink-200' : 'focus:ring-red-200 border-slate-300'}`}
                     placeholder={placeholder}
                     value={query}
                     onChange={e => setQuery(e.target.value)}
+                    disabled={currentCount >= maxLimit}
                 />
             </div>
             {/* Dropdown Results */}
             {results.length > 0 && (
-                <div className="absolute top-full left-0 right-0 bg-white border border-slate-200 shadow-xl rounded-b z-50 max-h-48 overflow-y-auto">
-                    {results.map((item) => (
+                <div className="absolute top-full left-0 right-0 bg-white border border-slate-200 shadow-xl rounded-b-lg z-50 max-h-72 overflow-y-auto mt-1 custom-scrollbar">
+                    {results.map((item, idx) => (
                         <div
-                            key={item.id}
+                            key={item.id || idx}
                             onClick={() => handleSelect(item)}
-                            className="p-2 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center"
+                            className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center group transition-colors"
                         >
-                            <span className="text-sm font-medium text-slate-700">{item.name}</span>
-                            <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                                {formatSize(item.audience_size_lower_bound || 0)}
+                            <div className="flex items-center gap-3">
+                                {/* AVATAR REAL ou FAKE */}
+                                <div className="w-9 h-9 flex-shrink-0 rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-[2px]">
+                                    {item.picture ? (
+                                        <img src={item.picture} alt={item.name} className="w-full h-full rounded-full object-cover bg-white" />
+                                    ) : (
+                                        <div className="w-full h-full rounded-full bg-white flex items-center justify-center font-bold text-xs text-slate-700 uppercase">
+                                            {item.type === 'INTEREST' ? <Hash size={14} /> : item.name.substring(0, 2)}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex flex-col">
+                                    <div className="text-sm font-bold text-slate-800 flex items-center gap-1">
+                                        {item.handle || item.name}
+                                        {item.verified && <BadgeCheck size={14} className="text-blue-500 fill-blue-500 text-white" />}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 truncate max-w-[200px]">{item.name}</div>
+                                </div>
+                            </div>
+
+                            <span className="text-[10px] whitespace-nowrap font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-full group-hover:bg-pink-50 group-hover:text-pink-600 transition-colors">
+                                {formatSize(item.audience_size)} {item.type === 'PAGE' ? 'followers' : 'audience'}
                             </span>
                         </div>
                     ))}
                 </div>
             )}
-            {/* Simple Loading Indicator */}
-            {loading && <div className="absolute right-3 top-2.5"><Loader2 size={14} className="animate-spin text-slate-400" /></div>}
+            {/* Loading */}
+            {loading && <div className="absolute right-3 top-3.5"><Loader2 size={16} className="animate-spin text-slate-400" /></div>}
         </div>
     );
 };
@@ -115,7 +147,7 @@ export const BriefingWizard: React.FC<Props> = ({ onComplete }) => {
 
     const handleNext = () => setStep(s => s + 1);
 
-    // Handlers de Tag via Autocomplete
+    // Handlers
     const addPosTag = (tagName: string) => {
         if (!data.targeting.tribeReferences.includes(tagName)) {
             setData({ ...data, targeting: { ...data.targeting, tribeReferences: [...data.targeting.tribeReferences, tagName] } });
@@ -128,11 +160,20 @@ export const BriefingWizard: React.FC<Props> = ({ onComplete }) => {
         }
     };
 
+    const removePosTag = (tag: string) => {
+        setData({ ...data, targeting: { ...data.targeting, tribeReferences: data.targeting.tribeReferences.filter(t => t !== tag) } });
+    };
+
+    const removeNegTag = (tag: string) => {
+        setData({ ...data, targeting: { ...data.targeting, negativeHints: data.targeting.negativeHints.filter(t => t !== tag) } });
+    };
+
     const handleConfirmScanning = async () => {
         setIsScanning(true);
         try {
             console.log(`🚀 Iniciando Scan Deep Targeting [${data.archetype}]...`);
             const enrichedData = await runBriefingScan(data);
+            await new Promise(r => setTimeout(r, 1500));
             onComplete(enrichedData);
         } catch (error) {
             console.error("❌ Erro fatal no Wizard:", error);
@@ -202,55 +243,65 @@ export const BriefingWizard: React.FC<Props> = ({ onComplete }) => {
         </div>
     );
 
-    // STEP 2: ATAQUE E DEFESA (LIVE TARGETING)
+    // STEP 2: ATAQUE E DEFESA (INSTAGRAM PROFILES)
     if (step === 2) return (
-        <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow-xl max-h-[80vh] overflow-y-auto">
+        <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow-xl">
             <h2 className="text-2xl font-bold text-slate-800 mb-1">Estratégia de Alvo</h2>
-            <p className="text-sm text-slate-400 mb-6">Defina quem você QUER e quem você NÃO QUER impactar.</p>
+            <p className="text-sm text-slate-500 mb-6">Defina de 1 a 10 perfis referência e quais deseja bloquear.</p>
 
             {/* CLUSTER A: INCLUSÃO (QUEM SEGUEM) */}
-            <div className="mb-6">
-                <label className="flex items-center gap-2 text-sm font-bold text-emerald-700 uppercase mb-2">
-                    <BadgeCheck size={16} /> Tribo / Referências (Ataque)
-                </label>
-                <div className="flex gap-2 mb-2 relative">
-                    <InterestAutocomplete
-                        placeholder="Busque marcas, influencers ou interesses (ex: Apple)..."
-                        onSelect={addPosTag}
-                        variant="positive"
-                    />
+            <div className="mb-8">
+                <div className="flex justify-between items-end mb-2">
+                    <label className="flex items-center gap-2 text-sm font-bold text-pink-600 uppercase">
+                        <BadgeCheck size={16} /> Tribo / Referências (Ataque)
+                    </label>
+                    <span className="text-xs text-slate-400">{data.targeting.tribeReferences.length}/10</span>
                 </div>
-                <div className="flex flex-wrap gap-2 min-h-[40px] p-2 bg-slate-50 rounded border border-slate-100">
+
+                <InstagramProfileSearch
+                    placeholder="Ex: @canvabrasil ou #marketing..."
+                    onAdd={addPosTag}
+                    currentCount={data.targeting.tribeReferences.length}
+                    variant="positive"
+                />
+
+                <div className="flex flex-wrap gap-2 mt-3 min-h-[40px] p-3 bg-slate-50 rounded-lg border border-slate-100">
                     {data.targeting.tribeReferences.map(tag => (
-                        <span key={tag} className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1 animate-in fade-in zoom-in duration-300">
-                            {tag} <button onClick={() => setData({ ...data, targeting: { ...data.targeting, tribeReferences: data.targeting.tribeReferences.filter(t => t !== tag) } })} className="hover:text-red-500">×</button>
+                        <span key={tag} className="bg-white border border-pink-100 text-pink-700 pl-3 pr-2 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm animate-in fade-in zoom-in duration-300">
+                            {tag} <button onClick={() => removePosTag(tag)} className="text-slate-300 hover:text-red-500 transition-colors"><X size={14} /></button>
                         </span>
                     ))}
+                    {data.targeting.tribeReferences.length === 0 && <span className="text-slate-400 text-xs italic">Nenhum perfil adicionado.</span>}
                 </div>
             </div>
 
             {/* CLUSTER B: EXCLUSÃO (QUEM EVITAR) */}
             <div className="mb-6">
-                <label className="flex items-center gap-2 text-sm font-bold text-red-600 uppercase mb-2">
-                    <ShieldAlert size={16} /> Blocklist / Negativas (Defesa)
-                </label>
-                <div className="flex gap-2 mb-2 relative">
-                    <InterestAutocomplete
-                        placeholder="Busque perfis para bloquear (ex: Free fire)..."
-                        onSelect={addNegTag}
-                        variant="negative"
-                    />
+                <div className="flex justify-between items-end mb-2">
+                    <label className="flex items-center gap-2 text-sm font-bold text-red-600 uppercase">
+                        <ShieldAlert size={16} /> Blocklist / Negativas (Defesa)
+                    </label>
+                    <span className="text-xs text-slate-400">{data.targeting.negativeHints.length}/10</span>
                 </div>
-                <div className="flex flex-wrap gap-2 min-h-[40px] p-2 bg-slate-50 rounded border border-slate-100">
+
+                <InstagramProfileSearch
+                    placeholder="Ex: @freefire ou perfis indesejados..."
+                    onAdd={addNegTag}
+                    currentCount={data.targeting.negativeHints.length}
+                    variant="negative"
+                />
+
+                <div className="flex flex-wrap gap-2 mt-3 min-h-[40px] p-3 bg-slate-50 rounded-lg border border-slate-100">
                     {data.targeting.negativeHints.map(tag => (
-                        <span key={tag} className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1 animate-in fade-in zoom-in duration-300">
-                            {tag} <button onClick={() => setData({ ...data, targeting: { ...data.targeting, negativeHints: data.targeting.negativeHints.filter(t => t !== tag) } })} className="hover:text-red-900">×</button>
+                        <span key={tag} className="bg-white border border-red-100 text-red-700 pl-3 pr-2 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm animate-in fade-in zoom-in duration-300">
+                            {tag} <button onClick={() => removeNegTag(tag)} className="text-slate-300 hover:text-red-500 transition-colors"><X size={14} /></button>
                         </span>
                     ))}
+                    {data.targeting.negativeHints.length === 0 && <span className="text-slate-400 text-xs italic">Nenhum bloqueio definido.</span>}
                 </div>
             </div>
 
-            <button onClick={handleNext} disabled={data.targeting.tribeReferences.length < 1} className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">
+            <button onClick={handleNext} disabled={data.targeting.tribeReferences.length < 1} className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 transition-all">
                 Avançar <ArrowRight className="inline ml-2" size={18} />
             </button>
         </div>
@@ -295,23 +346,23 @@ export const BriefingWizard: React.FC<Props> = ({ onComplete }) => {
                     <div className="flex justify-center mb-6"><CheckCircle size={64} className="text-emerald-400" /></div>
                     <h2 className="text-2xl font-bold mb-6">Confirme o Protocolo</h2>
 
-                    <div className="bg-slate-800 rounded-lg p-4 text-left mb-6 space-y-2 text-sm">
-                        <div className="flex justify-between border-b border-slate-700 pb-1">
+                    <div className="bg-slate-800 rounded-lg p-4 text-left mb-6 space-y-3 text-sm">
+                        <div className="flex justify-between border-b border-slate-700 pb-2">
                             <span className="text-slate-400">Arquétipo:</span><span className="font-bold text-blue-400">{data.archetype}</span>
                         </div>
-                        <div className="flex justify-between border-b border-slate-700 pb-1">
+                        <div className="flex justify-between border-b border-slate-700 pb-2">
                             <span className="text-slate-400">Alvo:</span><span className="font-bold">{data.geography.city}</span>
                         </div>
-                        <div className="flex justify-between border-b border-slate-700 pb-1">
+                        <div className="flex justify-between border-b border-slate-700 pb-2">
                             <span className="text-slate-400">Verba:</span><span className="font-bold text-emerald-400">R$ {data.financials.monthlyBudget}</span>
                         </div>
                         <div>
-                            <span className="text-slate-400 block mb-1">Ataque (Inclusão):</span>
-                            <div className="flex flex-wrap gap-1 mb-2">{data.targeting.tribeReferences.map(t => <span key={t} className="bg-emerald-900 text-emerald-200 px-1.5 rounded text-[10px]">{t}</span>)}</div>
+                            <span className="text-slate-400 block mb-1">Ataque (Inclusão) - {data.targeting.tribeReferences.length} perfis:</span>
+                            <div className="flex flex-wrap gap-1 mb-2 max-h-20 overflow-y-auto custom-scrollbar">{data.targeting.tribeReferences.map(t => <span key={t} className="bg-emerald-900 text-emerald-200 px-2 py-0.5 rounded text-xs">{t}</span>)}</div>
                         </div>
                         <div>
-                            <span className="text-slate-400 block mb-1">Defesa (Exclusão):</span>
-                            <div className="flex flex-wrap gap-1">{data.targeting.negativeHints.length > 0 ? data.targeting.negativeHints.map(t => <span key={t} className="bg-red-900 text-red-200 px-1.5 rounded text-[10px]">{t}</span>) : <span className="text-slate-600 italic">Nenhum bloqueio</span>}</div>
+                            <span className="text-slate-400 block mb-1">Defesa (Exclusão) - {data.targeting.negativeHints.length} perfis:</span>
+                            <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scrollbar">{data.targeting.negativeHints.length > 0 ? data.targeting.negativeHints.map(t => <span key={t} className="bg-red-900 text-red-200 px-2 py-0.5 rounded text-xs">{t}</span>) : <span className="text-slate-600 italic">Nenhum bloqueio</span>}</div>
                         </div>
                     </div>
 

@@ -17,9 +17,9 @@ interface AdSetPayload {
         age_max: number;
         geo_locations: {
             custom_locations: CustomLocation[];
-            location_types: string[];
+            location_types?: string[];
         };
-        flexible_spec: Array<{
+        flexible_spec?: Array<{
             interests: Array<{ id: string; name: string }>;
         }>;
     };
@@ -62,13 +62,16 @@ export class MetaSyncService {
             throw new Error("Impossível sincronizar: Coordenadas GPS inválidas ou ausentes.");
         }
 
-        // 3. Interesses
-        const interests = (TARGETING_DNA[targetingMode] || []).map(item => ({
-            id: item.apiCode || '600312321', // Fallback ID se necessário (ex: Real Estate)
-            name: item.name
-        }));
+        // 3. Interesses (Validação Estrita)
+        // Só envia interesses se tivermos um ID de API real. IDs falsos (600...) causam rejeição.
+        const validInterests = (TARGETING_DNA[targetingMode] || [])
+            .filter(item => item.apiCode && item.apiCode.length > 5) // Filtra mocks
+            .map(item => ({
+                id: item.apiCode!,
+                name: item.name
+            }));
 
-        return {
+        const payload: AdSetPayload = {
             name: `BIA_REAL_${new Date().toISOString().split('T')[0]}_${targetingMode}`,
             daily_budget: Math.floor(budgetBRL * 100), // Centavos
             targeting: {
@@ -76,17 +79,23 @@ export class MetaSyncService {
                 age_max: 65,
                 geo_locations: {
                     custom_locations: validLocations,
-                    location_types: ['home', 'recent']
-                },
-                flexible_spec: [{ interests }]
+                    // location_types removido para evitar conflitos de permissão/versão
+                }
             }
         };
+
+        // Injeta interesses apenas se existirem códigos válidos
+        if (validInterests.length > 0) {
+            payload.targeting.flexible_spec = [{ interests: validInterests }];
+        }
+
+        return payload;
     }
 
     public static async executeSync(payload: AdSetPayload): Promise<any> {
         console.log("⚡ [BIA SYNC] Enviando Payload Real para Backend:", JSON.stringify(payload, null, 2));
 
-        const response = await fetch('/api/meta-ads/campaign-create', {
+        const response = await fetch('http://localhost:3001/api/meta-ads/campaign-create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -95,7 +104,8 @@ export class MetaSyncService {
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.message || 'Erro desconhecido na Meta API.');
+            // Prioriza a mensagem vinda do servidor (ex: "Token não configurado")
+            throw new Error(data.message || 'Erro de comunicação com a API.');
         }
 
         return data;
