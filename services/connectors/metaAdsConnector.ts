@@ -11,45 +11,49 @@ export interface MetaInterest {
 const API_URL = 'http://localhost:3001';
 
 export async function searchMetaInterests(query: string): Promise<MetaInterest[]> {
-    // 1. Validação de Input (Evita chamadas inúteis)
     if (!query || query.length < 2) return [];
 
+    // --- CORREÇÃO: REMOVER @ e # ---
+    // Transforma "@canva" em "canva" e "#marketing" em "marketing"
+    const cleanQuery = query.replace(/^[@#]/, '').trim();
+
+    if (cleanQuery.length < 2) return [];
+
     try {
-        console.log(`🔎 [FRONTEND] Buscando interesse: "${query}" em ${API_URL}`);
+        console.log(`🔎 [FRONTEND] Buscando interesse limpo: "${cleanQuery}" (Original: ${query})`);
 
-        // Timeout de segurança (3 segundos) para não travar a UI se o servidor estiver lento
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-        const response = await fetch(`${API_URL}/api/meta/targeting-search?q=${encodeURIComponent(query)}`, {
+        const response = await fetch(`${API_URL}/api/meta/targeting-search?q=${encodeURIComponent(cleanQuery)}`, {
             signal: controller.signal
         });
 
         clearTimeout(timeoutId);
 
-        // Se o servidor estiver desligado ou der erro, não tenta ler JSON
         if (!response.ok) {
-            console.warn(`⚠️ Backend inacessível ou erro: ${response.status}`);
-            return []; // Retorna vazio, mas NÃO QUEBRA
+            console.warn(`⚠️ Backend respondeu com status: ${response.status}`);
+            return [];
         }
 
         const data = await response.json();
 
-        // Validação final de tipo
-        return Array.isArray(data) ? data : [];
+        // Se a API retornar vazio, e for uma busca curta, pode ser normal.
+        if (Array.isArray(data)) {
+            console.log(`✅ Encontrados ${data.length} resultados para "${cleanQuery}"`);
+            return data;
+        }
+
+        return [];
 
     } catch (error: any) {
-        // Log discreto para não assustar no console se for apenas servidor desligado
-        if (error.name === 'AbortError') {
-            console.warn("⏱️ Busca cancelada (Timeout)");
-        } else {
-            console.error("❌ Erro de conexão (Meta Search): Servidor Offline?", error.message);
+        if (error.name !== 'AbortError') {
+            console.error("❌ Erro de conexão:", error.message);
         }
-        return []; // BLINDAGEM: Retorna array vazio para o Wizard continuar funcionando
+        return [];
     }
 }
 
-// Verificação de Saúde
 export const verifyMetaAds = async () => {
     try {
         await fetch(`${API_URL}/api/connectors/meta-ads/verify`, { method: 'HEAD' });
