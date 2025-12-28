@@ -1,494 +1,57 @@
-
-export enum AppStep {
-  BRIEFING = 'BRIEFING',
-  LOADING = 'LOADING',
-  DASHBOARD = 'DASHBOARD'
-}
-
-export type DashboardView = 'COCKPIT' | 'EXPLORER' | 'COMMAND_CENTER';
-
-// =========================
-// GEO SIGNALS — CORE TYPES (Canonical)
-// =========================
-
-export type DataLabel = "REAL" | "PARTIAL_REAL" | "DERIVED" | "UNAVAILABLE" | "NOT_CONFIGURED";
-export type SourceSystem = "IBGE" | "OSM_NOMINATIM" | "OSM_OVERPASS" | "GOOGLE_ADS" | "GA4" | "SEARCH_CONSOLE" | "META_ADS" | "RFB" | "INTERNAL";
-
-export interface FetchAttempt {
-  at: string;
-  url: string;
-  method: "GET" | "POST";
-  ok: boolean;
-  status?: number;
-  contentType?: string;
-  note?: string;
-  durationMs?: number;
-}
-
-export interface Provenance {
-  label: DataLabel;
-  source: SourceSystem | string; // string allowed for legacy compat temporarily
-  method?: string;
-  source_url?: string;
-  evidence_urls?: string[];
-  attempts?: FetchAttempt[];
-  fetchedAt?: string;
-  locale?: string;
-  notes?: string;
-  confidence?: number; // Legacy compat
-  ts?: string; // Legacy compat
-}
-
-// Aliases for compatibility
-export type DataProvenance = Provenance;
-export type DataProvenanceLabel = DataLabel;
-export type GeoSignals = GeoSignalsEnvelope; // Alias for legacy code
-
-export interface WeeklyHeatmap {
-  id: string;
-  mode: 'DIGITAL' | 'PHYSICAL';
-  metric: string;
-  windowDays: number;
-  timezone: string;
-  grid: number[][]; // 7 days x 24 hours
-  bestWindows: Array<{ day: string; hour: number; value: number }>;
-  worstWindows: Array<{ day: string; hour: number; value: number }>;
-  provenance: Provenance;
-}
-
-export interface MapSettings {
-  showIncome: boolean;
-  showLogistics: boolean;
-  showCompetitors: boolean;
-  liveTime: number;
-  radius: number;
-  zoom: number;
-  minScore: number;
-  selectedPersona: string;
-  hideNoise?: boolean;
-  showHeatmap?: boolean;
-  showIsochrone?: boolean;
-  showTacticalMesh?: boolean;
-  showHotspots?: boolean;
-}
-
-export interface TacticalFeature {
-  type: 'Feature';
-  geometry: any;
-  properties: {
-    id: number;
-    geocode: string;
-    income: number;
-    population: number;
-    volume: number;
-    density: number;
-    name: string;
-    provenance?: Provenance;
-  };
-}
-
-export interface TacticalGeoJson {
-  type: 'FeatureCollection';
-  features: TacticalFeature[];
-}
-
-export interface GeoPoint {
-  lat: number;
-  lng: number;
-}
-
-export type GeometryType = "Polygon" | "MultiPolygon" | "LineString" | "MultiLineString";
-
-export interface GeoJSONGeometry {
-  type: GeometryType;
-  coordinates: any;
-}
-
-// ==================================
-// POLYGONS (IBGE malhas / setores)
-// ==================================
-
-export type PolygonKind = "IBGE_MUNICIPIO_MALHA" | "IBGE_SETOR_CENSITARIO" | "CUSTOM_AREA";
-
-export interface PolygonProperties {
-  id: string;
-  kind: PolygonKind;
-  ibge_municipio_id?: string;
-  ibge_setor_id?: string;
-  name?: string;
-  adminLevel?: "estado" | "municipio" | "setor" | "custom";
-  population?: number | null;
-  income?: number | null;
-  targetAudienceEstimate?: number | null;
-  score?: number | null;
-}
-
-export interface GeoSignalPolygon {
-  type: "Feature";
-  geometry: GeoJSONGeometry;
-  properties: PolygonProperties;
-  provenance: Provenance;
-}
-
-// =======================
-// HOTSPOTS (até 20)
-// =======================
-
-export type HotspotKind = "MEETING_POINT" | "HIGH_INTENT" | "MOBILITY_NODE" | "COMMERCIAL_CLUSTER" | "CUSTOM_PIN";
-
-export interface HotspotProperties {
-  id: string;
-  kind: HotspotKind;
-  name?: string;
-  rank?: number;
-  score?: number | null;
-  targetAudienceEstimate?: number | null;
-  note?: string;
-}
-
-export interface GeoSignalHotspot {
-  id: string;
-  point: GeoPoint;
-  properties: HotspotProperties;
-  provenance: Provenance;
-  // Legacy compat fields
-  lat?: number;
-  lng?: number;
-  label?: string;
-}
-
-// Meta-specific Hotspot schema for API contract
-export interface MetaHotspot {
-  id: string;
-  rank: number;
-  name: string;
-  lat: number;
-  lng: number;
-  radiusMeters: number;
-  metrics: {
-    audience: number | null;
-    dailyReach: number | null;
-    dailyLeads: number | null;
-    shareOfLocalPopulation?: number | null;
-    localPopulation?: number | null;
-  };
-  score: number | null;
-  provenance: Provenance;
-  scope: { kind: 'CITY' | 'STATE' | 'COUNTRY'; city?: string; uf?: string; municipioId?: string };
-}
-
-// =======================
-// FLOWS (linhas / ruas)
-// =======================
-
-export type FlowKind = "STREET_FLOW" | "COMMUTE_FLOW" | "FOOTFALL_FLOW";
-
-export interface FlowProperties {
-  id: string;
-  kind: FlowKind;
-  intensity?: number | null;
-  label?: string;
-}
-
-export interface GeoSignalFlow {
-  type: "Feature";
-  geometry: GeoJSONGeometry;
-  properties: FlowProperties;
-  provenance: Provenance;
-}
-
-// =======================
-// TIMESERIES 168h
-// =======================
-
-export type TimeseriesMetric = "DIGITAL_INTENT" | "FOOTFALL_ESTIMATE" | "AD_ACTIVITY" | "CUSTOM";
-
-export interface Timeseries168h {
-  metric: TimeseriesMetric;
-  values: number[]; // 168 values
-  unit: "INDEX_0_100" | "COUNT" | "RATE" | "UNKNOWN";
-  timezone: string;
-  weekStartLocalISO: string;
-  geoScope: {
-    kind: "municipio" | "setor" | "custom";
-    ibge_municipio_id?: string;
-    polygonId?: string;
-  };
-  provenance: Provenance;
-}
-
-// =======================
-// ENVELOPE FINAL
-// =======================
-
-export interface GeoSignalsEnvelope {
-  version: "1.0";
-  createdAt: string;
-  realOnly: boolean;
-  briefing: {
-    primaryCity?: string;
-    ibge_municipio_id?: string;
-    radiusMeters?: number;
-    marketPositioning?: string;
-    objective?: string;
-    audience?: {
-      gender?: "M" | "F" | "ALL";
-      ageRanges?: string[];
-    };
-    dataSources?: DataSourcesConfig; // Use the interface
-  };
-  polygons: GeoSignalPolygon[];
-  hotspots: GeoSignalHotspot[];
-  flows: GeoSignalFlow[];
-  timeseries168h: Timeseries168h[];
-  warnings?: string[];
-
-  // Legacy aliases
-  timeseries?: any[];
-  meta?: any;
-}
-
-// Connector Types
-export type ConnectorStatus = "REAL" | "NOT_CONFIGURED" | "UNAVAILABLE" | "ERROR";
-
-export interface ConnectorErrorResponse {
-  ok: false;
-  status: ConnectorStatus;
-  connector: SourceSystem;
-  message: string;
-  missing?: string[];
-  meta?: Record<string, any>;
-  requestId: string;
-  timestamp: string;
-}
-
-export interface ConnectorOkResponse<T> {
-  ok: true;
-  status: "REAL";
-  connector: SourceSystem;
-  data: T;
-  provenance?: Provenance;
-  requestId: string;
-  timestamp: string;
-}
-
-export type MetaAdsPanelStatus = "REAL" | "NOT_CONFIGURED" | "UNAVAILABLE" | "ERROR";
-
-export type MetaAdsProvenanceSource = "META_ADS" | "GOOGLE" | "IBGE" | "RFB" | "BIA";
-
-export type MetaAdsProvenance = {
-  label: DataLabel;
-  source: MetaAdsProvenanceSource;
-  method?: string;
-  source_url?: string;
-  retrieved_at?: string;
-  notes?: string;
-  attempts?: Array<{ url: string; status?: number; ok?: boolean; error?: string }>;
-};
-
-export type MetaAdsConnectionMeta = {
-  connected: boolean;
-  accountId?: string;
-  businessId?: string;
-  pixelId?: string;
-  datasetId?: string;
-  lastVerifiedAt?: string;
-};
-
-export type MetaRefinement = {
-  kind: "INTEREST" | "BEHAVIOR" | "DEMOGRAPHIC";
-  name: string;
-  metaId?: string;
-  rationale: string;
-  provenance: MetaAdsProvenance;
-};
-
-export type MetaEstimates = {
-  audience_size?: { min?: number; max?: number; value?: number };
-  daily_reach?: { min?: number; max?: number; value?: number };
-  daily_leads?: { min?: number; max?: number; value?: number };
-  provenance: MetaAdsProvenance;
-};
-
-export type TerritoryContext = {
-  ibge?: { population?: number | null; income?: number | null; provenance: MetaAdsProvenance };
-  google?: { timeseries168?: any; provenance: MetaAdsProvenance };
-  rfb?: { poi_count?: number | null; categories?: Array<{ cnae: string; count: number }>; provenance: MetaAdsProvenance };
-};
-
-export type MetaAdsPanelPayload = {
-  status: MetaAdsPanelStatus;
-  connection: MetaAdsConnectionMeta;
-  baseTargeting: {
-    geo: any;
-    ageRanges: string[];
-    genders: string[];
-    objective: string;
-    operationalModel?: string;
-    positioning?: string;
-  };
-  tier: 5 | 10 | 20;
-  refinements: MetaRefinement[];
-  estimates: MetaEstimates;
-  territory: TerritoryContext;
-  exportPayload?: any;
-  provenance: MetaAdsProvenance;
-};
-
-// Legacy Config Interfaces (Kept for compatibility with existing UI components)
-export interface ConnectorConfigBase {
-  connected: boolean;
-  status?: "DISCONNECTED" | "PENDING" | "CONNECTED" | "NOT_CONFIGURED";
-  lastCheckedAt?: string;
-  notes?: string;
-}
-export interface GoogleAdsConfig extends ConnectorConfigBase { customerId?: string; accountId?: string; loginCustomerId?: string; }
-export interface MetaAdsConfig extends ConnectorConfigBase { adAccountId?: string; pixelId?: string; }
-export interface RfbConfig extends ConnectorConfigBase { cnpj?: string; }
-
-export interface DataSourcesConfig {
-  googleAds: GoogleAdsConfig;
-  metaAds: MetaAdsConfig;
-  rfb: RfbConfig;
-  ibge: { connected: boolean };
-  osm: { connected: boolean };
-}
-
-// Briefing Data (Updated to include new GeoSignalsEnvelope)
-export type OperationalModel = 'Fixed' | 'ClientVisit' | 'Itinerant' | 'Shopping' | 'Investor' | 'Digital';
-export type MarketPositioning = 'Popular' | 'CostBenefit' | 'Premium' | 'Luxury';
-export type TargetGender = 'Female' | 'Male' | 'Mixed';
-export type AgeRange = '18-24' | '25-34' | '35-44' | '45-54' | '55-64' | '65+';
-export type GeographyScope = 'City' | 'State' | 'Country';
-export type Objective = 'DominateRegion' | 'SellMore' | 'FindSpot' | 'ValidateIdea';
-
-export interface IbgeSocioData {
-  population: number;
-  pib: number;
-  averageIncome: number;
-  lastUpdate: string;
-  geocode: string;
-  provenance?: Provenance;
-  populationYear?: number;
-  income?: number | null;
-  incomeSource?: string;
-}
-
-export interface RichLocationData {
-  id: string;
-  shortName: string;
-  fullName: string;
-  hierarchy: { municipality: string; state: string; region?: string; };
-  coords: { lat: number; lng: number; };
-  rawAddressDetails?: any;
-  ibgeData?: IbgeSocioData;
-  provenance?: Provenance;
-}
+// ARQUÉTIPOS DE NEGÓCIO
+export type BusinessArchetype = 'LOCAL_BUSINESS' | 'DIGITAL_BUSINESS' | 'PUBLIC_FIGURE';
 
 export interface BriefingInteligente {
-  productDescription: string;
-  contactMethod: string;
-  usageDescription: string;
-  operationalModel: OperationalModel | null;
-  dataSources: DataSourcesConfig;
-  marketPositioning: MarketPositioning | null;
-  targetGender: TargetGender | null;
-  targetAge: AgeRange[];
-  geography: {
-    city: string;
-    state: string[];
-    country: string;
-    coords?: { lat: number; lng: number };
-    lat?: number;
-    lng?: number;
-    level: GeographyScope;
+  // Novo Campo Controlador (Polimorfismo)
+  archetype: BusinessArchetype;
+
+  // Campos Básicos Adaptáveis
+  productDescription: string; // Ou "Ideologia" para Políticos
+
+  // Segmentação Financeira (ROI)
+  financials: {
+    ticketPrice: number; // Valor do Produto
+    monthlyBudget: number; // Verba Disponível
   };
-  objective: Objective | null;
-  totalBudget?: number; // Added for Targeting DNA logic
-}
 
-export interface BriefingData extends BriefingInteligente {
-  // Extended fields for legacy compatibility
-  geography: {
-    city: string;
-    state: string[];
-    country: string;
-    coords?: { lat: number; lng: number };
-    level: GeographyScope;
-    selectedItems: RichLocationData[]; // Extra field in UI
-    lat?: number;
-    lng?: number;
-    municipioId?: string;
+  // DNA do Tráfego (Ataque e Defesa)
+  targeting: {
+    tribeReferences: string[]; // INCLUSÃO (Ex: "Pablo Marçal", "Apple") - Min 3 tags
+    negativeHints: string[];   // EXCLUSÃO (Ex: "Sem dinheiro", "Curiosos")
+    targetGender: 'Todos' | 'Homens' | 'Mulheres';
+    targetAge: string;
   };
-  ibgeData?: IbgeSocioData;
-  geoSignals?: GeoSignalsEnvelope; // NEW
+
+  // Geografia Flexível
+  geography: {
+    level: 'STREET' | 'CITY' | 'STATE' | 'COUNTRY';
+    city: string; // Se Digital, pode ser "Brasil" ou "Global"
+    radius: number;
+    lat: number;
+    lng: number;
+  };
+
+  // Sinais de Inteligência (Hotspots) - Enriquecidos com Exclusão
+  geoSignals: GeoSignal | null;
 }
 
-export interface IbgeOverlayBundle {
-  municipioId: string;
-  year: string;
-  sectors: any;
-  stats: Record<string, any>;
-  provenance: Provenance;
+export interface GeoSignal {
+  hotspots: Hotspot[];
+  scannedArea: {
+    lat: number;
+    lng: number;
+    radiusKm: number;
+  };
+  bestSegments: string[];    // Lista de Inclusão Sugerida
+  excludedSegments: string[]; // Lista de Exclusão Sugerida (NOVO)
+  competitorsFound: string[];
 }
 
-export interface GeminiAnalysis {
-  verdict: string;
-  action: string;
-  score: number;
-  confidence?: number;
-  reasons?: string[];
-  risks?: string[];
-  limitations?: string[];
-}
-
-export interface AdTechZoneData {
+export interface Hotspot {
   id: string;
   lat: number;
   lng: number;
-  cnpjDensity: number;
-  footfallTraffic: number;
-  isGhost: boolean;
-  techFingerprint: 'iOS_5G' | 'ANDROID_WIFI';
-  income: number;
-  population: number;
-  creativeHook: string;
-  dominantProfile: string;
-  provenance?: Provenance;
-}
-
-export interface SectorStat {
-  geocode: string;
-  population?: number | null;
-  income?: number | null;
-  provenance: Provenance;
-}
-
-export interface ConnectorResult<T> {
-  status: 'SUCCESS' | 'PARTIAL' | 'ERROR' | 'NOT_CONFIGURED' | 'UNAVAILABLE';
-  provenance: DataLabel;
-  data: T | null;
-  sourceUrl?: string;
-  notes?: string;
-  attempts?: Array<{ url: string; status?: number; error?: string }>;
-}
-
-export interface IbgeScanData {
-  population: number;
-  income: number | null;
-  populationYear: number;
-  incomeSource?: string;
-}
-
-export interface ScanResult {
-  timestamp: string;
-  geocode: ConnectorResult<{ lat: number; lng: number; displayName: string; bounds: [number, number, number, number] }>;
-  ibge: ConnectorResult<IbgeScanData>;
-  ibgeCode?: string;
-  places: ConnectorResult<any>;
-  metaAds: ConnectorResult<any>;
-  rfb: ConnectorResult<any>;
-  ibgeSectors?: ConnectorResult<IbgeOverlayBundle>;
-  hotspots?: any[];
-  geoSignals?: GeoSignalsEnvelope;
+  label: string;
+  score: number; // 0-100
+  properties?: any;
 }

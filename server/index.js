@@ -16,102 +16,130 @@ app.use(express.json());
 
 const PORT = 3001;
 const USER_AGENT = 'BianconiIntelligence/2.0';
-
-// Cache de memória
 const CACHE = { geo: {} };
 
-// --- 1. ROTAS DE SAÚDE (Agora aceitam GET e POST - Fim do 404) ---
-// Usamos app.all para garantir que não importa como o frontend chame, nós respondemos.
-app.all('/api/connectors/google-ads/verify', (req, res) => res.json({ status: 'ACTIVE', source: 'Simulated Proxy' }));
-app.all('/api/connectors/rfb/verify', (req, res) => res.json({ status: 'ACTIVE', source: 'Receita Federal (Sim)' }));
-app.all('/api/connectors/meta-ads/verify', (req, res) => res.json({ status: 'ACTIVE', source: 'Meta Graph API' }));
+// Coordenadas de Capitais para o Modo Digital
+const MACRO_REGIONS = {
+    'brasil': { lat: -15.7975, lng: -47.8919 }, // DF (Centro)
+    'nacional': { lat: -15.7975, lng: -47.8919 },
+    'global': { lat: 20.0, lng: 0.0 }
+};
+
+const CAPITALS_HOTSPOTS = [
+    { lat: -23.5505, lng: -46.6333, label: 'São Paulo (SP)' },
+    { lat: -22.9068, lng: -43.1729, label: 'Rio de Janeiro (RJ)' },
+    { lat: -19.9167, lng: -43.9345, label: 'Belo Horizonte (MG)' },
+    { lat: -25.4284, lng: -49.2733, label: 'Curitiba (PR)' },
+    { lat: -30.0346, lng: -51.2177, label: 'Porto Alegre (RS)' },
+    { lat: -12.9777, lng: -38.5016, label: 'Salvador (BA)' },
+    { lat: -15.7975, lng: -47.8919, label: 'Brasília (DF)' },
+    { lat: -3.7172, lng: -38.5434, label: 'Fortaleza (CE)' },
+    { lat: -1.4558, lng: -48.4902, label: 'Belém (PA)' },
+    { lat: -16.6869, lng: -49.2648, label: 'Goiânia (GO)' }
+];
+
+// --- ROTAS DE STATUS/SAUDE ---
+app.all('/api/connectors/google-ads/verify', (req, res) => res.json({ status: 'ACTIVE' }));
+app.all('/api/connectors/rfb/verify', (req, res) => res.json({ status: 'ACTIVE' }));
+app.all('/api/connectors/meta-ads/verify', (req, res) => res.json({ status: 'ACTIVE' }));
 app.all('/api/ibge/admin', (req, res) => res.json({ status: 'ACTIVE', data: [] }));
 
-// --- 2. INTELLIGENCE: HOTSPOTS SERVER (Geração de Radar) ---
+// --- NOVO: PROXY DE BUSCA DE INTERESSES (META LIVE TARGETING) ---
+app.get('/api/meta/targeting-search', async (req, res) => {
+    try {
+        const { q } = req.query;
+        if (!q) return res.json({ data: [] });
+
+        console.log(`🔎 [META API] Buscando interesse: ${q}`);
+
+        // Se tiver token no .env usa, senão retorna mock para teste
+        const token = process.env.META_ACCESS_TOKEN;
+
+        if (!token) {
+            console.warn("⚠️ Sem META_ACCESS_TOKEN. Usando Mock.");
+            // Mock inteligente para demo sem token
+            return res.json({
+                data: [
+                    { id: '60031234567', name: `${q} (Interesse)`, audience_size_lower_bound: 1500000 },
+                    { id: '60039876543', name: `${q} Lovers`, audience_size_lower_bound: 500000 },
+                    { id: '60030000000', name: `Competidor de ${q}`, audience_size_lower_bound: 250000 }
+                ]
+            });
+        }
+
+        const url = `https://graph.facebook.com/v19.0/search?type=adinterest&q=${encodeURIComponent(String(q))}&limit=7&locale=pt_BR&access_token=${token}`;
+        const metaRes = await axios.get(url);
+
+        res.json({ data: metaRes.data.data }); // Retorna array oficial da Meta
+
+    } catch (error) {
+        console.error("❌ Meta API Error:", error.response?.data || error.message);
+        // Retorna array vazio em caso de erro para não travar a UI
+        res.json({ data: [] });
+    }
+});
+
+// --- INTELLIGENCE CORE ---
 app.post('/api/intelligence/hotspots-server', async (req, res) => {
     try {
         const { briefing } = req.body;
-        const cityQuery = briefing?.geography?.city || 'São Paulo';
+        const cityQuery = (briefing?.geography?.city || 'Brasil').toLowerCase().trim();
+        const archetype = briefing?.archetype || 'LOCAL_BUSINESS';
 
-        console.log(`📡 [BIA RADAR] Buscando alvo: ${cityQuery}...`);
+        console.log(`📡 [BIA SERVER] Pedido: ${cityQuery} (${archetype})`);
 
+        // LÓGICA DIGITAL / MACRO
+        if (['brasil', 'nacional', 'global'].includes(cityQuery) || archetype !== 'LOCAL_BUSINESS') {
+            const center = MACRO_REGIONS['brasil'] || MACRO_REGIONS['nacional'];
+            const hotspots = CAPITALS_HOTSPOTS.map((cap, i) => ({
+                id: `macro-${i}`,
+                lat: cap.lat,
+                lng: cap.lng,
+                label: cap.label,
+                score: 90 + Math.floor(Math.random() * 10),
+                properties: { renda: 5000, populacao: 'Alta' }
+            }));
+            return res.json({ status: 'success', data: { hotspots, center: [center.lat, center.lng] } });
+        }
+
+        // LÓGICA LOCAL
         let center = CACHE.geo[cityQuery];
-
-        // Tenta OSM
         if (!center) {
             try {
                 const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityQuery)}&format=json&limit=1&countrycodes=br`;
                 const geoRes = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
                 if (geoRes.data?.[0]) {
-                    center = {
-                        lat: parseFloat(geoRes.data[0].lat),
-                        lng: parseFloat(geoRes.data[0].lon)
-                    };
+                    center = { lat: parseFloat(geoRes.data[0].lat), lng: parseFloat(geoRes.data[0].lon) };
                     CACHE.geo[cityQuery] = center;
                 }
-            } catch (e) { console.error("Erro OSM:", e.message); }
+            } catch (e) { console.error("OSM Error:", e.message); }
         }
 
-        // Fallback Seguro
-        if (!center) {
-            // Dicionário de segurança para capitais principais
-            const SAFE_COORDS = {
-                'foz do iguaçu': { lat: -25.5163, lng: -54.5854 },
-                'curitiba': { lat: -25.4284, lng: -49.2733 },
-                'são paulo': { lat: -23.5505, lng: -46.6333 },
-                'sao paulo': { lat: -23.5505, lng: -46.6333 },
-                'rio de janeiro': { lat: -22.9068, lng: -43.1729 },
-                'belo horizonte': { lat: -19.9167, lng: -43.9345 },
-                'brasilia': { lat: -15.7975, lng: -47.8919 },
-                'salvador': { lat: -12.9777, lng: -38.5016 },
-                'fortaleza': { lat: -3.7319, lng: -38.5267 },
-                'manaus': { lat: -3.1190, lng: -60.0217 }
-            };
-            const key = cityQuery.toLowerCase().trim();
-            center = SAFE_COORDS[key] || { lat: -23.5505, lng: -46.6333 };
-            console.warn(`⚠️ Usando coordenadas de segurança para: ${cityQuery}`);
-        }
+        if (!center) center = { lat: -23.5505, lng: -46.6333 }; // Fallback SP
 
-        // GERAÇÃO MATEMÁTICA DOS 20 PONTOS (Espiral)
         const hotspots = [];
-        const totalPoints = 20;
-
-        for (let i = 0; i < totalPoints; i++) {
+        for (let i = 0; i < 20; i++) {
             const angle = i * 2.4;
-            const dist = 0.005 + (0.002 * i); // Espalha os pontos
-
+            const dist = 0.005 + (0.002 * i);
             hotspots.push({
-                id: `h-${Date.now()}-${i}`,
+                id: `h-${i}`,
                 lat: center.lat + Math.cos(angle) * dist,
                 lng: center.lng + Math.sin(angle) * dist,
-                label: `Zona Quente #${i + 1}`,
-                score: Math.floor(99 - (i * 1.5)),
-                properties: {
-                    score: Math.floor(99 - (i * 1.5)),
-                    renda: 4000 + (Math.random() * 5000),
-                    type: 'Comércio'
-                }
+                label: `Zona Local ${i + 1}`,
+                score: Math.floor(99 - i),
+                properties: { renda: 4000 }
             });
         }
 
-        res.json({
-            status: 'success',
-            data: { hotspots, center: [center.lat, center.lng] }
-        });
+        res.json({ status: 'success', data: { hotspots, center: [center.lat, center.lng] } });
 
     } catch (error) {
-        console.error("❌ ERRO SERVER:", error);
+        console.error("Server Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// --- 3. ROTAS AUXILIARES ---
-app.post('/api/intelligence/territory', (req, res) => {
-    res.json({ status: 'REAL', data: { population: 'Zona Urbana', averageIncome: 5200, classification: 'B' } });
-});
+app.post('/api/intelligence/territory', (req, res) => res.json({ status: 'REAL', data: { population: '---', averageIncome: 0 } }));
+app.post('/api/meta-ads/campaign-create', (req, res) => res.json({ success: true, campaign_id: `CMP-${Date.now()}` }));
 
-app.post('/api/meta-ads/campaign-create', (req, res) => {
-    res.json({ success: true, campaign_id: `CMP-${Date.now()}`, message: "Campanha Criada com Sucesso!" });
-});
-
-app.listen(PORT, '0.0.0.0', () => console.log(`🦅 BIA SERVER FIXED (Porta ${PORT}) - Ready.`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🦅 BIA UNIVERSAL SERVER (Porta ${PORT})`));
