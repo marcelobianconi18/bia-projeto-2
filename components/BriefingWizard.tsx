@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Target, ArrowRight, MapPin, Search, Store, Globe, Megaphone, CheckCircle, AlertTriangle, Loader2, ShieldAlert, BadgeCheck, XCircle } from 'lucide-react';
-import { BriefingInteligente } from '../types';
+import React, { useState } from 'react';
+import { Target, ArrowRight, MapPin, Search, Store, Globe, Megaphone, CheckCircle, AlertTriangle, Loader2, ShieldAlert, BadgeCheck } from 'lucide-react';
+import { BriefingInteligente, BusinessArchetype } from '../types';
 import { runBriefingScan } from '../services/scanOrchestrator';
 
 // Estado Inicial Robusto
@@ -17,114 +17,37 @@ interface Props {
   onComplete: (data: BriefingInteligente) => void;
 }
 
-// COMPONENTE HELPER: AUTOCOMPLETE (Live Targeting)
-const InterestAutocomplete = ({
-  placeholder,
-  onSelect,
-  variant = 'positive'
-}: {
-  placeholder: string,
-  onSelect: (val: string) => void,
-  variant?: 'positive' | 'negative'
-}) => {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-
-  // Debounce Search
-  useEffect(() => {
-    if (query.length < 2) { setResults([]); return; }
-
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/meta/targeting-search?q=${query}`);
-        const json = await res.json();
-        setResults(json.data || []);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  // Click Outside
-  useEffect(() => {
-    function handleClickOutside(event: any) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-        setResults([]);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSelect = (item: any) => {
-    onSelect(item.name);
-    setQuery('');
-    setResults([]);
-  };
-
-  // Formata números (ex: 1500000 -> 1.5M)
-  const formatSize = (n: number) => {
-    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-    if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
-    return n;
-  };
-
-  return (
-    <div className="relative flex-1" ref={wrapperRef}>
-      <div className="flex gap-2">
-        <input
-          className={`flex-1 p-2 border rounded text-sm outline-none focus:ring-2 ${variant === 'positive' ? 'focus:ring-emerald-200 border-slate-300' : 'focus:ring-red-200 border-slate-300'}`}
-          placeholder={placeholder}
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-        />
-      </div>
-      {/* Dropdown Results */}
-      {results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 bg-white border border-slate-200 shadow-xl rounded-b z-50 max-h-48 overflow-y-auto">
-          {results.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => handleSelect(item)}
-              className="p-2 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center"
-            >
-              <span className="text-sm font-medium text-slate-700">{item.name}</span>
-              <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                {formatSize(item.audience_size_lower_bound || 0)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-      {/* Simple Loading Indicator */}
-      {loading && <div className="absolute right-3 top-2.5"><Loader2 size={14} className="animate-spin text-slate-400" /></div>}
-    </div>
-  );
-};
-
 export const BriefingWizard: React.FC<Props> = ({ onComplete }) => {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(0); // 0 = Seleção de Arquétipo
   const [data, setData] = useState<BriefingInteligente>(INITIAL_BRIEFING);
+
+  // Inputs temporários para tags (VOLTANDO AO MODO MANUAL)
+  const [tempPosTag, setTempPosTag] = useState('');
+  const [tempNegTag, setTempNegTag] = useState('');
+
   const [isScanning, setIsScanning] = useState(false);
 
   const handleNext = () => setStep(s => s + 1);
 
-  // Handlers de Tag via Autocomplete
-  const addPosTag = (tagName: string) => {
-    if (!data.targeting.tribeReferences.includes(tagName)) {
-      setData({ ...data, targeting: { ...data.targeting, tribeReferences: [...data.targeting.tribeReferences, tagName] } });
+  // Adicionar Tag Positiva (Manual)
+  const addPosTag = () => {
+    if (tempPosTag.trim() && !data.targeting.tribeReferences.includes(tempPosTag)) {
+      setData({
+        ...data,
+        targeting: { ...data.targeting, tribeReferences: [...data.targeting.tribeReferences, tempPosTag] }
+      });
+      setTempPosTag('');
     }
   };
 
-  const addNegTag = (tagName: string) => {
-    if (!data.targeting.negativeHints.includes(tagName)) {
-      setData({ ...data, targeting: { ...data.targeting, negativeHints: [...data.targeting.negativeHints, tagName] } });
+  // Adicionar Tag Negativa (Manual)
+  const addNegTag = () => {
+    if (tempNegTag.trim() && !data.targeting.negativeHints.includes(tempNegTag)) {
+      setData({
+        ...data,
+        targeting: { ...data.targeting, negativeHints: [...data.targeting.negativeHints, tempNegTag] }
+      });
+      setTempNegTag('');
     }
   };
 
@@ -136,7 +59,7 @@ export const BriefingWizard: React.FC<Props> = ({ onComplete }) => {
       onComplete(enrichedData);
     } catch (error) {
       console.error("❌ Erro fatal no Wizard:", error);
-      onComplete(data);
+      onComplete(data); // Fallback
     } finally {
       setIsScanning(false);
     }
@@ -202,7 +125,7 @@ export const BriefingWizard: React.FC<Props> = ({ onComplete }) => {
     </div>
   );
 
-  // STEP 2: ATAQUE E DEFESA (LIVE TARGETING)
+  // STEP 2: ATAQUE E DEFESA (DEEP TARGETING - MANUAL MODE)
   if (step === 2) return (
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow-xl max-h-[80vh] overflow-y-auto">
       <h2 className="text-2xl font-bold text-slate-800 mb-1">Estratégia de Alvo</h2>
@@ -213,16 +136,13 @@ export const BriefingWizard: React.FC<Props> = ({ onComplete }) => {
         <label className="flex items-center gap-2 text-sm font-bold text-emerald-700 uppercase mb-2">
           <BadgeCheck size={16} /> Tribo / Referências (Ataque)
         </label>
-        <div className="flex gap-2 mb-2 relative">
-          <InterestAutocomplete
-            placeholder="Busque marcas, influencers ou interesses (ex: Apple)..."
-            onSelect={addPosTag}
-            variant="positive"
-          />
+        <div className="flex gap-2 mb-2">
+          <input className="flex-1 p-2 border border-slate-300 rounded text-sm" placeholder="Ex: Pablo Marçal, Apple..." value={tempPosTag} onChange={e => setTempPosTag(e.target.value)} onKeyPress={e => e.key === 'Enter' && addPosTag()} />
+          <button onClick={addPosTag} className="px-3 bg-emerald-100 text-emerald-700 rounded font-bold hover:bg-emerald-200">+</button>
         </div>
         <div className="flex flex-wrap gap-2 min-h-[40px] p-2 bg-slate-50 rounded border border-slate-100">
           {data.targeting.tribeReferences.map(tag => (
-            <span key={tag} className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1 animate-in fade-in zoom-in duration-300">
+            <span key={tag} className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1">
               {tag} <button onClick={() => setData({ ...data, targeting: { ...data.targeting, tribeReferences: data.targeting.tribeReferences.filter(t => t !== tag) } })} className="hover:text-red-500">×</button>
             </span>
           ))}
@@ -234,16 +154,13 @@ export const BriefingWizard: React.FC<Props> = ({ onComplete }) => {
         <label className="flex items-center gap-2 text-sm font-bold text-red-600 uppercase mb-2">
           <ShieldAlert size={16} /> Blocklist / Negativas (Defesa)
         </label>
-        <div className="flex gap-2 mb-2 relative">
-          <InterestAutocomplete
-            placeholder="Busque perfis para bloquear (ex: Free fire)..."
-            onSelect={addNegTag}
-            variant="negative"
-          />
+        <div className="flex gap-2 mb-2">
+          <input className="flex-1 p-2 border border-slate-300 rounded text-sm" placeholder="Ex: Curiosos, Sem Dinheiro..." value={tempNegTag} onChange={e => setTempNegTag(e.target.value)} onKeyPress={e => e.key === 'Enter' && addNegTag()} />
+          <button onClick={addNegTag} className="px-3 bg-red-100 text-red-700 rounded font-bold hover:bg-red-200">+</button>
         </div>
         <div className="flex flex-wrap gap-2 min-h-[40px] p-2 bg-slate-50 rounded border border-slate-100">
           {data.targeting.negativeHints.map(tag => (
-            <span key={tag} className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1 animate-in fade-in zoom-in duration-300">
+            <span key={tag} className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1">
               {tag} <button onClick={() => setData({ ...data, targeting: { ...data.targeting, negativeHints: data.targeting.negativeHints.filter(t => t !== tag) } })} className="hover:text-red-900">×</button>
             </span>
           ))}
