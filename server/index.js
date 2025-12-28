@@ -11,7 +11,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const IBGE_DATA_ROOT = path.join(process.cwd(), 'server', 'data', 'ibge');
 
 async function geocodeCity(city, state) {
