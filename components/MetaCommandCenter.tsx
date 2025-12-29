@@ -5,6 +5,7 @@ import L, { LatLngBoundsExpression } from 'leaflet';
 import { BriefingInteligente } from '../types';
 import { TARGETING_DNA, TargetingLayer } from '../services/targetingDNA';
 import { MetaSyncService } from '../services/MetaSyncService';
+import { buildApiUrl } from '../services/apiConfig';
 
 // --- CONTROLADOR DO MAPA ---
 const MapController = ({ center, bounds }: { center: [number, number] | null, bounds: LatLngBoundsExpression | null }) => {
@@ -91,7 +92,7 @@ export const MetaCommandCenter: React.FC<Props> = ({ briefingData }) => {
       setRealTerritory(null); // Reset anterior
       const fetchIntel = async () => {
          try {
-            const res = await fetch('/api/intelligence/territory', {
+            const res = await fetch(buildApiUrl('/api/intelligence/territory'), {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
                body: JSON.stringify({ lat: spot.lat, lng: spot.lng })
