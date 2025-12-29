@@ -137,15 +137,27 @@ export class MetaSyncService {
         if (validLocations.length === 0) throw new Error("Impossível sincronizar: Coordenadas GPS inválidas.");
 
         // 4. Interesses (Targeting DNA)
+        // FILTRAGEM DE SEGURANÇA: Remove IDs simulados (Ex: "600...") para evitar erro 400 na API.
+        // Apenas interesses recuperados via API de Marketing Real (Search) deveriam passar.
         const validInterests = (TARGETING_DNA[targetingMode] || [])
-            .filter(item => item.apiCode && item.apiCode.length > 5)
+            .filter(item => {
+                // Se não tem apiCode, descarta.
+                if (!item.apiCode) return false;
+                // Se é um código simulado conhecido (começa com 600 e tem 9 digitos, padrão do nosso mock), descarta.
+                if (item.apiCode.startsWith('600') || item.apiCode.startsWith('DEMO_') || item.apiCode.startsWith('BEHAVIOR_')) {
+                    console.warn(`⚠️ [SYNC] Ignorando interesse simulado para segurança: ${item.name} (${item.apiCode})`);
+                    return false;
+                }
+                // Aceita apenas numéricos longos que pareçam reais
+                return /^\d{10,}$/.test(item.apiCode) || item.apiCode.length > 12; // IDs reais do FB costumam ser bem longos
+            })
             .map(item => ({ id: item.apiCode!, name: item.name }));
 
         // 5. Montagem Final
         const payload: AdSetPayload = {
             name: `BIA_REAL_${new Date().toISOString().split('T')[0]}_${targetingMode}_${specialCategories[0] || 'STD'}`,
             daily_budget: Math.floor((briefing.budget || 20) * 100), // R$ -> Centavos
-            special_ad_categories: specialCategories.length > 0 ? specialCategories : [], // Correção crítica
+            special_ad_categories: specialCategories.length > 0 ? specialCategories : [],
             targeting: {
                 age_min: min,
                 age_max: max,

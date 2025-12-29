@@ -107,12 +107,23 @@ export const MetaCommandCenter: React.FC<Props> = ({ briefingData }) => {
    const handleSync = async () => {
       setIsSyncing(true);
       try {
-         const payload = MetaSyncService.buildPayload(totalInvest, realHotspots, activeTab, drillRadius);
+         // Snapshot que une dados originais do briefing (nicho, demografia)
+         // com o orçamento ajustado em tempo real pelo usuário.
+         const briefingSnapshot = {
+            ...briefingData,
+            budget: dailyBudget
+         };
+
+         const payload = MetaSyncService.buildPayload(briefingSnapshot, realHotspots, activeTab, drillRadius);
          const res = await MetaSyncService.executeSync(payload);
-         alert(`✅ SUCESSO REAL:\nCampanha criada: ${res.campaign_id}`);
+
+         alert(`✅ SUCESSO REAL:\nCampanha criada: ${res.campaign_id}\nConjunto: ${res.adset_id}`);
       } catch (e: any) {
-         alert(`❌ FALHA NA SINCRONIZAÇÃO:\n${e.message || "Erro de conexão"}`);
-      } finally { setIsSyncing(false); }
+         console.error(e);
+         alert(`❌ FALHA NA SINCRONIZAÇÃO:\n${e.message || "Erro desconhecido na API do Meta."}`);
+      } finally {
+         setIsSyncing(false);
+      }
    };
 
    return (
