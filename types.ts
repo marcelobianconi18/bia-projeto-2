@@ -20,6 +20,8 @@ export interface BriefingInteligente {
     negativeHints: string[];   // EXCLUSÃO (Ex: "Sem dinheiro", "Curiosos")
     targetGender: 'Todos' | 'Homens' | 'Mulheres';
     targetAge: string;
+    description?: string; // Descrição do nicho
+    generatedInterests?: any[]; // Interesses gerados pelo Backend
   };
 
   // Geografia Flexível

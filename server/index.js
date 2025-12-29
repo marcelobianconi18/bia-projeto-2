@@ -168,7 +168,56 @@ app.post('/api/intelligence/hotspots-server', async (req, res) => {
     }
 });
 
-// 3. META SYNC
+// 3. GERADOR DE TARGETING DINÂMICO (NOVO)
+app.post('/api/intelligence/generate-targeting', async (req, res) => {
+    const { niche, location } = req.body;
+    console.log(`🧠 [SERVER] Gerando DNA Tático para: "${niche}" em "${location}"`);
+
+    // Heurística Simples para Demonstração (Em produção, aqui entraria o Gemini/GPT)
+    const keywords = (niche || '').toLowerCase();
+    let specificInterests = [];
+
+    if (keywords.includes('leite') || keywords.includes('nutri') || keywords.includes('saude')) {
+        specificInterests = [
+            { id: '600334411', name: 'Nutrição e Bem-estar', type: 'INTEREST' },
+            { id: '600334412', name: 'Produtos Orgânicos', type: 'INTEREST' },
+            { id: '600334413', name: 'Pais com filhos pequenos (0-5 anos)', type: 'DEMOGRAPHIC' },
+            { id: '600334414', name: 'Compradores de Supermercado', type: 'BEHAVIOR' }
+        ];
+    } else if (keywords.includes('imoveis') || keywords.includes('casa') || keywords.includes('luxo')) {
+        specificInterests = [
+            { id: '600312321', name: 'Imóveis de Luxo', type: 'INTEREST' },
+            { id: '600334512', name: 'Investimentos Imobiliários', type: 'INTEREST' },
+            { id: '600455678', name: 'Condomínios Fechados', type: 'INTEREST' },
+            { id: '600998877', name: 'Viajantes de Primeira Classe', type: 'BEHAVIOR' }
+        ];
+    } else if (keywords.includes('marketing') || keywords.includes('business')) {
+        specificInterests = [
+            { id: '600889900', name: 'Administradores de Páginas Comerciais', type: 'BEHAVIOR' },
+            { id: '600889901', name: 'Pequenos Empresários', type: 'DEMOGRAPHIC' },
+            { id: '600889902', name: 'Marketing Digital', type: 'INTEREST' },
+            { id: '600889903', name: 'Empreendedorismo', type: 'INTEREST' }
+        ];
+    } else {
+        // Fallback Genérico, mas misturado
+        specificInterests = [
+            { id: `gen-${Math.random()}`, name: `Interessados em ${niche}`, type: 'INTEREST' },
+            { id: '600123456', name: 'Compradores Engajados', type: 'BEHAVIOR' },
+            { id: '600654321', name: 'Dispositivos Recentes (iPhone/Android)', type: 'BEHAVIOR' }
+        ];
+    }
+
+    res.json({
+        status: 'success',
+        data: {
+            expansive: specificInterests.slice(0, 2), // Topo de Funil
+            sniper: specificInterests, // Meio de Funil (Completo)
+            contextual: specificInterests.filter(i => i.type === 'BEHAVIOR') // Fundo de Funil
+        }
+    });
+});
+
+// 4. META SYNC
 app.post('/api/meta-ads/campaign-create', async (req, res) => {
     if (!process.env.META_TOKEN || !process.env.META_AD_ACCOUNT_ID) {
         return res.status(400).json({ message: "Configure META_TOKEN e META_AD_ACCOUNT_ID no .env" });

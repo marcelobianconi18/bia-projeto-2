@@ -154,10 +154,17 @@ export const MetaCommandCenter: React.FC<Props> = ({ briefingData }) => {
                         <select value={itemsLimit} onChange={(e) => setItemsLimit(Number(e.target.value) as any)} className="text-[10px] border rounded px-1 py-0.5 bg-white"><option value={5}>Top 5</option><option value={10}>Top 10</option><option value={20}>Top 20</option></select>
                      </div>
                      <div className="space-y-2">
-                        {(TARGETING_DNA[activeTab] || []).slice(0, itemsLimit).map((item, idx) => (
+                        {/* LÓGICA HÍBRIDA: Se tiver 'generatedInterests' no briefing, usa. Se não, fallback para o estático TARGETING_DNA */}
+                        {((briefingData.targeting?.generatedInterests && activeTab === 'SNIPER')
+                           ? briefingData.targeting.generatedInterests
+                           : (TARGETING_DNA[activeTab] || [])
+                        ).slice(0, itemsLimit).map((item: any, idx: number) => (
                            <div key={idx} className="flex items-center gap-3 p-2 bg-white border border-slate-200 rounded hover:border-blue-400 transition-colors group">
                               <div className="w-1 h-8 bg-blue-500 rounded-full"></div>
-                              <div className="flex-1"><div className="text-xs font-bold text-slate-800">{item.name}</div><div className="text-[10px] text-slate-500">{item.category}</div></div>
+                              <div className="flex-1">
+                                 <div className="text-xs font-bold text-slate-800">{item.name}</div>
+                                 <div className="text-[10px] text-slate-500">{item.type || item.category || 'INTERESSE'}</div>
+                              </div>
                            </div>
                         ))}
                      </div>

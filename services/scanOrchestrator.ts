@@ -29,7 +29,24 @@ export async function runBriefingScan(briefing: BriefingInteligente): Promise<Br
         // 2. INTELLIGENCE DEEP DIVE (Mockado ou Real via Gemini)
         // Aqui geramos sugestões de targeting baseadas no briefing
         console.log("🛡️ [DEEP TARGETING] Gerado: 2 Inclusões / 2 Exclusões");
-        // (A lógica de targeting é gerada no backend ou mockada aqui se necessário)
+
+        // --- DINÂMICA DE TARGETING ---
+        const niche = briefing.targeting.description || briefing.productDescription || 'Geral';
+        console.log(`🧠 [ORCHESTRATOR] Solicitando DNA Tático para: "${niche}"...`);
+        try {
+            const dnaResponse = await fetch(buildApiUrl('/api/intelligence/generate-targeting'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ niche, location: briefing.geography.city })
+            });
+            const dnaData = await dnaResponse.json();
+            if (dnaData.status === 'success') {
+                console.log("✅ [ORCHESTRATOR] DNA Tático Recebido.");
+                // Injeta o DNA novo no briefing para a UI usar
+                enrichedBriefing.targeting.generatedInterests = dnaData.data.sniper;
+            }
+        } catch (e) { console.warn("⚠️ Falha no DNA Tático, usando padrão."); }
+        // ----------------------------
 
     } catch (error) {
         console.error("🚨 [ORCHESTRATOR CRITICAL]", error);
