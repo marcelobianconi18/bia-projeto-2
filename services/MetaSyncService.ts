@@ -5,7 +5,7 @@ import { TARGETING_DNA, TargetingLayer } from './targetingDNA';
 interface CustomLocation {
     latitude: number;
     longitude: number;
-    radius: number; // Numérico simples
+    radius: number;
     distance_unit: 'kilometer' | 'mile';
     name?: string;
 }
@@ -13,9 +13,11 @@ interface CustomLocation {
 interface AdSetPayload {
     name: string;
     daily_budget: number;
+    special_ad_categories: string[]; // Adicionado para Compliance
     targeting: {
         age_min: number;
         age_max: number;
+        genders?: number[]; // 1=Male, 2=Female
         geo_locations: {
             custom_locations: CustomLocation[];
             location_types?: string[];
@@ -28,64 +30,135 @@ interface AdSetPayload {
 
 export class MetaSyncService {
 
+    /**
+     * Detecta Categorias de Anúncio Especial (Compliance Shield)
+     * Obrigatório para Imóveis, Crédito e Emprego para evitar bloqueios.
+     */
+    private static detectSpecialCategory(textContext: string): string[] {
+        const text = textContext.toLowerCase();
+
+        // 🏠 Housing (Moradia)
+        const housingKeywords = ['imóvel', 'imovel', 'apartamento', 'casa', 'condomínio', 'aluguel', 'corretor', 'financiamento imobiliário', 'loteamento', 'minha casa minha vida'];
+        if (housingKeywords.some(w => text.includes(w))) return ['HOUSING'];
+
+        // 💳 Credit (Crédito)
+        const creditKeywords = ['empréstimo', 'cartão de crédito', 'consorcio', 'consórcio', 'financiamento de veículo', 'score de crédito'];
+        if (creditKeywords.some(w => text.includes(w))) return ['CREDIT'];
+
+        // 💼 Employment (Emprego)
+        const employmentKeywords = ['vaga', 'contratação', 'estágio', 'trabalhe conosco', 'oportunidade de emprego', 'rh', 'recrutamento'];
+        if (employmentKeywords.some(w => text.includes(w))) return ['EMPLOYMENT'];
+
+        return []; // Anúncio Padrão
+    }
+
+    /**
+     * Converte range de string (ex: "25-45") para números. 
+     * Trata "65+" e inputs inválidos com segurança.
+     */
+    private static parseAgeRange(ageString?: string): { min: number, max: number } {
+        if (!ageString) return { min: 18, max: 65 }; // Default seguro
+
+        if (ageString.includes('+')) {
+            const min = parseInt(ageString.replace('+', '')) || 18;
+            return { min, max: 65 };
+        }
+
+        const parts = ageString.split('-');
+        if (parts.length === 2) {
+            return {
+                min: parseInt(parts[0]) || 18,
+                max: parseInt(parts[1]) || 65
+            };
+        }
+
+        return { min: 18, max: 65 };
+    }
+
+    /**
+     * Mapeia gênero para API do Meta
+     * Masculino -> [1], Feminino -> [2], Todos -> undefined (não enviar o campo = Todos)
+     */
+    private static parseGender(genderString?: string): number[] | undefined {
+        if (!genderString) return undefined;
+        const g = genderString.toLowerCase();
+
+        if (g.startsWith('h') || g.includes('masc')) return [1];
+        if (g.startsWith('m') || g.includes('fem')) return [2];
+
+        return undefined; // Ambos
+    }
+
     public static buildPayload(
-        budgetBRL: number,
-        hotspots: any[], // Dados reais com lat/lng
+        briefing: any, // Recebe briefing completo para contexto
+        hotspots: any[],
         targetingMode: TargetingLayer,
         drillRadiusKm: number
     ): AdSetPayload {
 
-        // 1. Validar Dados de Entrada
+        // 1. Extração de Contexto para Compliance
+        const businessContext = `${briefing.businessDescription || ''} ${briefing.niche || ''}`;
+        const specialCategories = this.detectSpecialCategory(businessContext);
+        const isSpecialCategory = specialCategories.length > 0;
+
+        // 2. Demografia Dinâmica
+        let { min, max } = this.parseAgeRange(briefing.targetAge);
+        let genders = this.parseGender(briefing.targetGender);
+
+        // 🛡️ SAFETY OVERRIDE: Se for Categoria Especial, o Meta OBRIGA demografia aberta
+        if (isSpecialCategory) {
+            console.warn(`🛡️ [COMPLIANCE SHIELD] Categoria Especial (${specialCategories[0]}) detectada. Forçando demografia aberta para evitar rejeição.`);
+            min = 18;
+            max = 65;
+            genders = undefined; // Todos
+        }
+
+        // 3. Validar Geo Locations
         if (!hotspots || hotspots.length === 0) {
             throw new Error("Nenhum Hotspot identificado para criar campanha.");
         }
 
-        // 2. Construir Geo Locations (Formato Estrito Meta API)
         const validLocations: CustomLocation[] = [];
-
         hotspots.forEach((spot, index) => {
-            // Detecção robusta de coordenadas
             const lat = typeof spot.lat === 'number' ? spot.lat : (spot.coords ? spot.coords[0] : null);
             const lng = typeof spot.lng === 'number' ? spot.lng : (spot.coords ? spot.coords[1] : null);
 
             if (lat && lng) {
                 validLocations.push({
-                    latitude: parseFloat(lat.toFixed(6)), // Limitar precisão
+                    latitude: parseFloat(lat.toFixed(6)),
                     longitude: parseFloat(lng.toFixed(6)),
-                    radius: drillRadiusKm < 1 ? 1 : drillRadiusKm, // Meta exige min 1km
-                    distance_unit: 'kilometer', // OBRIGATÓRIO (Fix do Invalid Parameter)
+                    radius: drillRadiusKm < 1 ? 1 : drillRadiusKm,
+                    distance_unit: 'kilometer',
                     name: spot.label || `Hotspot ${index + 1}`
                 });
             }
         });
 
-        if (validLocations.length === 0) {
-            throw new Error("Impossível sincronizar: Coordenadas GPS inválidas ou ausentes.");
-        }
+        if (validLocations.length === 0) throw new Error("Impossível sincronizar: Coordenadas GPS inválidas.");
 
-        // 3. Interesses (Validação Estrita)
-        // Só envia interesses se tivermos um ID de API real. IDs falsos (600...) causam rejeição.
+        // 4. Interesses (Targeting DNA)
         const validInterests = (TARGETING_DNA[targetingMode] || [])
-            .filter(item => item.apiCode && item.apiCode.length > 5) // Filtra mocks
-            .map(item => ({
-                id: item.apiCode!,
-                name: item.name
-            }));
+            .filter(item => item.apiCode && item.apiCode.length > 5)
+            .map(item => ({ id: item.apiCode!, name: item.name }));
 
+        // 5. Montagem Final
         const payload: AdSetPayload = {
-            name: `BIA_REAL_${new Date().toISOString().split('T')[0]}_${targetingMode}`,
-            daily_budget: Math.floor(budgetBRL * 100), // Centavos
+            name: `BIA_REAL_${new Date().toISOString().split('T')[0]}_${targetingMode}_${specialCategories[0] || 'STD'}`,
+            daily_budget: Math.floor((briefing.budget || 20) * 100), // R$ -> Centavos
+            special_ad_categories: specialCategories.length > 0 ? specialCategories : [], // Correção crítica
             targeting: {
-                age_min: 25,
-                age_max: 65,
+                age_min: min,
+                age_max: max,
                 geo_locations: {
-                    custom_locations: validLocations,
-                    // location_types removido para evitar conflitos de permissão/versão
+                    custom_locations: validLocations
                 }
             }
         };
 
-        // Injeta interesses apenas se existirem códigos válidos
+        // Adiciona Gênero se não for nulo (e não for especial)
+        if (genders) payload.targeting.genders = genders;
+
+        // Adiciona Interesses se houver
         if (validInterests.length > 0) {
             payload.targeting.flexible_spec = [{ interests: validInterests }];
         }
@@ -94,7 +167,7 @@ export class MetaSyncService {
     }
 
     public static async executeSync(payload: AdSetPayload): Promise<any> {
-        console.log("⚡ [BIA SYNC] Enviando Payload Real para Backend:", JSON.stringify(payload, null, 2));
+        console.log("⚡ [BIA SYNC] Enviando Payload Seguro para Backend:", JSON.stringify(payload, null, 2));
 
         const response = await fetch(buildApiUrl('/api/meta-ads/campaign-create'), {
             method: 'POST',
@@ -105,8 +178,7 @@ export class MetaSyncService {
         const data = await response.json();
 
         if (!response.ok) {
-            // Prioriza a mensagem vinda do servidor (ex: "Token não configurado")
-            throw new Error(data.message || 'Erro de comunicação com a API.');
+            throw new Error(data.message || data.error?.message || 'Erro de comunicação com a API do Meta.');
         }
 
         return data;
