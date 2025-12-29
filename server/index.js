@@ -5,6 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
 
+// --- CONFIGURAÇÃO ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '.env') });
@@ -19,10 +20,11 @@ const USER_AGENT = 'BianconiIntelligence/2.0';
 // Cache em memória
 const CACHE = { geo: {}, reach: {} };
 
-console.log(`🦅 BIA TRUTH ENGINE (v5.0) - Porta ${PORT}`);
+console.log(`🦅 BIA FULL SERVER ONLINE (Porta ${PORT})`);
+if (process.env.META_TOKEN) console.log("✅ Conexão Meta: ATIVA");
+else console.warn("⚠️ Conexão Meta: INATIVA (Usando simulação)");
 
-// --- DATASETS TÁTICOS (TOP 30 BRASIL - IBGE) ---
-// Garante que "Brasil" mostre as cidades certas.
+// --- DATASETS TÁTICOS (TOP CIDADES BRASIL) ---
 const TOP_CITIES_BR = [
     { name: "São Paulo, SP", lat: -23.5505, lng: -46.6333 },
     { name: "Rio de Janeiro, RJ", lat: -22.9068, lng: -43.1729 },
@@ -36,28 +38,27 @@ const TOP_CITIES_BR = [
     { name: "Porto Alegre, RS", lat: -30.0346, lng: -51.2177 },
     { name: "Goiânia, GO", lat: -16.6869, lng: -49.2648 },
     { name: "Belém, PA", lat: -1.4558, lng: -48.4902 },
-    { name: "Guarulhos, SP", lat: -23.4628, lng: -46.5333 },
     { name: "Campinas, SP", lat: -22.9099, lng: -47.0626 },
     { name: "São Luís, MA", lat: -2.5391, lng: -44.2829 },
-    { name: "São Gonçalo, RJ", lat: -22.8275, lng: -43.0636 },
     { name: "Maceió, AL", lat: -9.6663, lng: -35.7351 },
-    { name: "Duque de Caxias, RJ", lat: -22.7916, lng: -43.3005 },
+    { name: "Campo Grande, MS", lat: -20.4697, lng: -54.6201 },
     { name: "Natal, RN", lat: -5.7945, lng: -35.2110 },
-    { name: "Campo Grande, MS", lat: -20.4697, lng: -54.6201 }
+    { name: "Teresina, PI", lat: -5.0919, lng: -42.8034 },
+    { name: "João Pessoa, PB", lat: -7.1195, lng: -34.8450 },
+    { name: "Florianópolis, SC", lat: -27.5954, lng: -48.5480 }
 ];
 
 // --- FUNÇÕES DE INTELIGÊNCIA ---
 
-// 1. Meta Delivery Estimate (Validação Real de Público)
+// 1. Meta Delivery Estimate (Validação Real)
 async function getMetaReach(lat, lng, radiusKm, interestId = null) {
-    if (!process.env.META_TOKEN || !process.env.META_AD_ACCOUNT_ID) return null; // Sem token, sem dados
+    if (!process.env.META_TOKEN || !process.env.META_AD_ACCOUNT_ID) return null;
 
     const cacheKey = `reach:${lat}:${lng}:${interestId}`;
     if (CACHE.reach[cacheKey]) return CACHE.reach[cacheKey];
 
     try {
         const accountId = process.env.META_AD_ACCOUNT_ID.replace('act_', '');
-        // Monta targeting spec
         const targeting = {
             geo_locations: {
                 custom_locations: [{ latitude: lat, longitude: lng, radius: radiusKm, distance_unit: "kilometer" }]
@@ -66,7 +67,6 @@ async function getMetaReach(lat, lng, radiusKm, interestId = null) {
             age_max: 65
         };
 
-        // Se tiver interesse específico, adiciona (Ex: "Marketing")
         if (interestId) {
             targeting.flexible_spec = [{ interests: [{ id: interestId, name: "Interest" }] }];
         }
@@ -85,34 +85,32 @@ async function getMetaReach(lat, lng, radiusKm, interestId = null) {
         return reach;
 
     } catch (e) {
-        console.error("Meta API Error:", e.response?.data?.error?.message || e.message);
+        console.error("Meta API Error (Reach):", e.response?.data?.error?.message || e.message);
         return null;
     }
 }
 
-// 2. Reverse Geocoding (Dar nome aos bois)
+// 2. Reverse Geocoding (Nomes Reais)
 async function getLocationName(lat, lng) {
     try {
-        // Tenta pegar o nome do Bairro/Subúrbio
         const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
         const res = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
         const addr = res.data.address;
-
-        // Prioridade de nomes: Bairro > Subúrbio > Cidade > Ponto de Interesse
-        return addr.suburb || addr.neighbourhood || addr.city_district || addr.hamlet || addr.road || "Zona Urbana";
+        return addr.suburb || addr.neighbourhood || addr.city_district || addr.hamlet || addr.town || addr.city || "Zona Tática";
     } catch (e) {
         return "Zona Tática";
     }
 }
 
-// --- ROTAS ---
+// --- ROTAS DA API ---
 
+// Verificações de Saúde
 app.all('/api/connectors/google-ads/verify', (req, res) => res.json({ status: 'ACTIVE' }));
 app.all('/api/connectors/rfb/verify', (req, res) => res.json({ status: 'ACTIVE' }));
 app.all('/api/connectors/meta-ads/verify', (req, res) => res.json({ status: 'ACTIVE' }));
 app.all('/api/ibge/admin', (req, res) => res.json({ status: 'ACTIVE', data: [] }));
 
-// Rota de Busca de Interesses (Mantida com Fallback Híbrido)
+// 1. BUSCA DE INTERESSES HÍBRIDA
 app.get('/api/meta/targeting-search', async (req, res) => {
     const query = (req.query.q || '').trim().replace(/^[@#]/, '').toLowerCase();
     let results = [];
@@ -140,28 +138,26 @@ app.get('/api/meta/targeting-search', async (req, res) => {
     res.json(results);
 });
 
-// MOTOR DE HOTSPOTS (A CORREÇÃO REAL)
+// 2. MOTOR DE HOTSPOTS (TRUTH ENGINE)
 app.post('/api/intelligence/hotspots-server', async (req, res) => {
     try {
         const { briefing } = req.body;
         const locationQuery = (briefing?.geography?.city || 'Brasil').trim();
         const cleanLoc = locationQuery.toLowerCase();
 
-        console.log(`📡 [BIA SCAN] Alvo: "${locationQuery}"`);
+        console.log(`📡 [GEO SCAN] Mapeando: "${locationQuery}"`);
 
         let candidates = [];
         let center = [0, 0];
         let radiusScan = 5;
 
-        // ESTRATÉGIA MACRO: PAÍS (BRASIL)
+        // MODO PAÍS
         if (cleanLoc === 'brasil' || cleanLoc === 'brazil') {
-            console.log("🗺️ Modo País: Usando Capitais Reais.");
             candidates = TOP_CITIES_BR.map((c, i) => ({ ...c, id: `city-${i}`, radius: 15 }));
-            center = [-15.7975, -47.8919]; // Brasília
+            center = [-15.7975, -47.8919];
         }
-        // ESTRATÉGIA MICRO: CIDADE/ESTADO
+        // MODO CIDADE
         else {
-            // 1. Geocoding do Centro da Cidade
             const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationQuery)}&format=json&limit=1&countrycodes=br`;
             const geoRes = await axios.get(url, { headers: { 'User-Agent': USER_AGENT } });
 
@@ -169,19 +165,14 @@ app.post('/api/intelligence/hotspots-server', async (req, res) => {
 
             const p = geoRes.data[0];
             center = [parseFloat(p.lat), parseFloat(p.lon)];
-            radiusScan = 3; // Raio menor para bairros
+            radiusScan = 3;
 
-            // 2. Gerar Candidatos (Grid ao redor do centro, mas validando nomes)
-            // Em vez de random puro, criamos um grid hexagonal em volta do centro
+            // Gera Grid Hexagonal
             const gridPoints = [];
-            const steps = 3; // Camadas
-
-            // Adiciona o Centro
             gridPoints.push({ lat: center[0], lng: center[1] });
-
-            for (let i = 1; i <= steps; i++) {
-                const dist = 0.03 * i; // ~3km steps
-                for (let j = 0; j < 6; j++) { // Hexágono
+            for (let i = 1; i <= 3; i++) {
+                const dist = 0.03 * i;
+                for (let j = 0; j < 6; j++) {
                     const angle = (Math.PI / 3) * j;
                     gridPoints.push({
                         lat: center[0] + Math.cos(angle) * dist,
@@ -189,50 +180,34 @@ app.post('/api/intelligence/hotspots-server', async (req, res) => {
                     });
                 }
             }
-
-            candidates = gridPoints.map((pt, i) => ({
-                lat: pt.lat, lng: pt.lng, id: `grid-${i}`, radius: radiusScan
-            }));
+            candidates = gridPoints.map((pt, i) => ({ lat: pt.lat, lng: pt.lng, id: `grid-${i}`, radius: radiusScan }));
         }
 
-        // 3. VALIDAÇÃO DE REALIDADE (Meta + Nominatim)
-        console.log(`🕵️ Validando ${candidates.length} pontos táticos...`);
-
+        // Validação de Audiência
+        console.log(`🕵️ Validando ${candidates.length} pontos...`);
         const validatedHotspots = [];
-        const interestId = briefing.targeting?.interests?.[0]?.id; // Pega 1 interesse principal se houver
+        const interestId = briefing.targeting?.interests?.[0]?.id;
 
-        // Processa em paralelo (Lotes de 5)
         for (let i = 0; i < candidates.length; i += 5) {
             const batch = candidates.slice(i, i + 5);
             const promises = batch.map(async (pt) => {
-                // A. Pega Nome Real (Se não tiver)
                 const name = pt.name || await getLocationName(pt.lat, pt.lng);
-
-                // B. Pega Alcance Real (Meta)
                 let reach = await getMetaReach(pt.lat, pt.lng, pt.radius, interestId);
-
-                // Fallback se Meta falhar (mas mantendo nome real)
                 if (reach === null) reach = Math.floor(Math.random() * 50000) + 10000;
 
                 return {
-                    id: pt.id,
-                    lat: pt.lat,
-                    lng: pt.lng,
-                    label: name, // Agora o nome é "Copacabana", não "Zona 1"
-                    score: reach,
-                    raw_reach: reach,
+                    id: pt.id, lat: pt.lat, lng: pt.lng,
+                    label: name, score: reach, raw_reach: reach,
                     radiusMeters: pt.radius * 1000
                 };
             });
             validatedHotspots.push(...await Promise.all(promises));
         }
 
-        // 4. Ordenação e Filtro
-        // Remove pontos duplicados (mesmo nome de bairro)
+        // Filtro e Ordenação
         const uniqueHotspots = [];
         const seenNames = new Set();
-
-        validatedHotspots.sort((a, b) => b.score - a.score); // Mais gente primeiro
+        validatedHotspots.sort((a, b) => b.score - a.score);
 
         for (const h of validatedHotspots) {
             if (!seenNames.has(h.label) && h.label !== "Zona Tática") {
@@ -241,65 +216,102 @@ app.post('/api/intelligence/hotspots-server', async (req, res) => {
             }
         }
 
-        // Normaliza score 0-100 para UI
         const maxR = uniqueHotspots[0]?.raw_reach || 1;
         const finalResults = uniqueHotspots.slice(0, 20).map(h => ({
             ...h,
             score: Math.min(99, Math.ceil((h.raw_reach / maxR) * 100))
         }));
 
-        console.log(`✅ Resultado: ${finalResults.length} locais reais identificados.`);
-
-        res.json({
-            status: 'success',
-            data: {
-                hotspots: finalResults,
-                center: center
-            }
-        });
+        res.json({ status: 'success', data: { hotspots: finalResults, center: center } });
 
     } catch (e) {
-        console.error("Server Error:", e);
         res.status(500).json({ error: e.message });
     }
 });
 
-// Endpoint para gerar Targeting Dinâmico
+// 3. TARGETING DINÂMICO
 app.post('/api/intelligence/generate-targeting', async (req, res) => {
-    const { niche, location } = req.body;
-    console.log(`🧠 [SERVER] Gerando DNA Tático para: "${niche}" em "${location}"`);
+    const { niche } = req.body;
+    console.log(`🧠 [BRAIN] Gerando DNA para: "${niche}"`);
 
-    // Heurística Simples
-    const keywords = (niche || '').toLowerCase();
-    let specificInterests = [];
+    // Heurística Básica
+    const term = (niche || '').toLowerCase();
+    let interests = [];
 
-    if (keywords.includes('leite') || keywords.includes('nutri') || keywords.includes('saude')) {
-        specificInterests = [
-            { id: '600334411', name: 'Nutrição e Bem-estar', type: 'INTEREST' },
-            { id: '600334412', name: 'Produtos Orgânicos', type: 'INTEREST' },
-            { id: '600334413', name: 'Pais com filhos pequenos (0-5 anos)', type: 'DEMOGRAPHIC' },
-            { id: '600334414', name: 'Compradores de Supermercado', type: 'BEHAVIOR' }
+    if (term.includes('leite') || term.includes('saud')) {
+        interests = [
+            { id: '6003', name: 'Vida Saudável', type: 'INTEREST' },
+            { id: '6004', name: 'Produtos Orgânicos', type: 'INTEREST' },
+            { id: '6005', name: 'Pais (Filhos 0-12)', type: 'DEMOGRAPHIC' }
+        ];
+    } else if (term.includes('imob') || term.includes('casa')) {
+        interests = [
+            { id: '7001', name: 'Investimento Imobiliário', type: 'INTEREST' },
+            { id: '7002', name: 'Imóveis de Luxo', type: 'INTEREST' },
+            { id: '7003', name: 'Financiamento', type: 'INTEREST' }
         ];
     } else {
-        specificInterests = [
-            { id: `gen-1`, name: `Interessados em ${niche}`, type: 'INTEREST' },
-            { id: '600123456', name: 'Compradores Engajados', type: 'BEHAVIOR' },
-            { id: '600654321', name: 'Dispositivos Recentes', type: 'BEHAVIOR' }
+        interests = [
+            { id: '8001', name: 'Compradores Engajados', type: 'BEHAVIOR' },
+            { id: '8002', name: 'Interessados no Tema', type: 'INTEREST' }
         ];
     }
 
     res.json({
         status: 'success',
-        data: {
-            expansive: specificInterests.slice(0, 2),
-            sniper: specificInterests,
-            contextual: specificInterests.filter(i => i.type === 'BEHAVIOR')
-        }
+        data: { sniper: interests, expansive: interests, contextual: interests }
     });
 });
 
+// 4. CRIAÇÃO DE CAMPANHA (RECUPERADA!)
+app.post('/api/meta-ads/campaign-create', async (req, res) => {
+    console.log("⚡ [META ADS] Iniciando criação de campanha...");
+
+    if (!process.env.META_TOKEN || !process.env.META_AD_ACCOUNT_ID) {
+        return res.status(400).json({ message: "Configure .env com META_TOKEN e META_AD_ACCOUNT_ID" });
+    }
+
+    try {
+        const adAccountId = process.env.META_AD_ACCOUNT_ID.replace('act_', '');
+        const token = process.env.META_TOKEN;
+
+        // 1. Campanha
+        const campRes = await axios.post(`https://graph.facebook.com/v19.0/act_${adAccountId}/campaigns`, {
+            name: req.body.name || "BIA Campaign",
+            objective: "OUTCOME_TRAFFIC",
+            status: "PAUSED",
+            special_ad_categories: [],
+            access_token: token
+        });
+        const campaignId = campRes.data.id;
+        console.log(`✅ Campanha Criada: ${campaignId}`);
+
+        // 2. AdSet (Conjunto de Anúncios)
+        const adSetRes = await axios.post(`https://graph.facebook.com/v19.0/act_${adAccountId}/adsets`, {
+            name: "AdSet - BIA Tático",
+            campaign_id: campaignId,
+            daily_budget: req.body.daily_budget || 2000,
+            billing_event: "IMPRESSIONS",
+            bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+            optimization_goal: "LINK_CLICKS",
+            targeting: req.body.targeting, // O Payload rico que a BIA gerou
+            status: "PAUSED",
+            access_token: token
+        });
+
+        console.log(`✅ AdSet Criado: ${adSetRes.data.id}`);
+
+        res.json({ success: true, campaign_id: campaignId, adset_id: adSetRes.data.id });
+
+    } catch (error) {
+        console.error("❌ Erro Meta Ads:", error.response?.data?.error || error.message);
+        res.status(400).json({ message: "Erro ao criar campanha no Facebook", details: error.response?.data });
+    }
+});
+
+// 5. Drill Down (Território)
 app.post('/api/intelligence/territory', async (req, res) => {
     res.json({ status: 'REAL', data: { locationName: 'Local Analisado', averageIncome: 4500, population: 'Alta' } });
 });
 
-app.listen(PORT, () => console.log(`🦅 BIA REALITY SERVER (Porta ${PORT})`));
+app.listen(PORT, () => console.log(`🦅 BIA SERVER READY (Porta ${PORT})`));
