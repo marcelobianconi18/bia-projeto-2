@@ -104,36 +104,24 @@ const InstagramProfileSearch = ({
             {results.length > 0 && (
                 <div className="absolute top-full left-0 right-0 bg-white border border-slate-200 shadow-xl rounded-b-lg z-50 max-h-72 overflow-y-auto mt-1 custom-scrollbar">
                     {results.map((item, idx) => (
-                        <div
-                            key={item.id || idx}
-                            onClick={() => handleSelect(item)}
-                            className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center group transition-colors"
-                        >
-                            <div className="flex items-center gap-3">
-                                {/* AVATAR REAL ou FAKE */}
-                                <div className="w-9 h-9 flex-shrink-0 rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-[2px]">
-                                    {item.picture ? (
-                                        <img src={item.picture} alt={item.name} className="w-full h-full rounded-full object-cover bg-white" />
-                                    ) : (
-                                        <div className="w-full h-full rounded-full bg-white flex items-center justify-center font-bold text-xs text-slate-700 uppercase">
-                                            {item.type === 'INTEREST' ? <Hash size={14} /> : item.name.substring(0, 2)}
-                                        </div>
+                        <li key={item.id || idx} onClick={() => handleSelect(item)} className="p-2 hover:bg-slate-50 cursor-pointer border-b last:border-0 border-slate-100">
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-1">
+                                    <span className={`font-bold ${item.type === 'profile' ? 'text-blue-600' : 'text-slate-600'}`}>
+                                        {item.name}
+                                    </span>
+                                    {/* Selo Azul Simulado */}
+                                    {item.verified && (
+                                        <svg className="w-3 h-3 text-blue-500 fill-current" viewBox="0 0 24 24">
+                                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                                        </svg>
                                     )}
                                 </div>
-
-                                <div className="flex flex-col">
-                                    <div className="text-sm font-bold text-slate-800 flex items-center gap-1">
-                                        {item.handle || item.name}
-                                        {item.verified && <BadgeCheck size={14} className="text-blue-500 fill-blue-500 text-white" />}
-                                    </div>
-                                    <div className="text-[10px] text-slate-500 truncate max-w-[200px]">{item.name}</div>
-                                </div>
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                    {item.followersText}
+                                </span>
                             </div>
-
-                            <span className="text-[10px] whitespace-nowrap font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-full group-hover:bg-pink-50 group-hover:text-pink-600 transition-colors">
-                                {formatSize(item.audience_size)} {item.type === 'PAGE' ? 'followers' : 'audience'}
-                            </span>
-                        </div>
+                        </li>
                     ))}
                 </div>
             )}

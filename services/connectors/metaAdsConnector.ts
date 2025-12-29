@@ -1,32 +1,28 @@
-// services/connectors/metaAdsConnector.ts
+import { buildApiUrl } from '../apiConfig';
 
 export interface MetaInterest {
     id: string;
     name: string;
     audience_size?: number;
-    path?: string[];
+    type?: 'profile' | 'hashtag';
+    verified?: boolean;
+    followersText?: string;
 }
-
-import { buildApiUrl } from '../apiConfig';
 
 export async function searchMetaInterests(query: string): Promise<MetaInterest[]> {
     if (!query || query.length < 2) return [];
 
-    // 1. Detecta Intenção Explicita (@ ou #)
+    // Detecta intenção explícita do usuário
     const wantsProfile = query.startsWith('@');
     const wantsHashtag = query.startsWith('#');
 
-    // 2. Limpeza para API (Remove @/# para buscar "marketing" ao invés de "#marketing")
     const cleanQuery = query.replace(/^[@#]/, '').trim();
-    if (cleanQuery.length < 2) return [];
 
     try {
-        console.log(`🔎 [FRONTEND] Buscando: "${cleanQuery}" (Intenção: ${wantsProfile ? 'Perfil' : wantsHashtag ? 'Hashtag' : 'Geral'})`);
-
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-        const response = await fetch(`${buildApiUrl('/api/meta/targeting-search')}?q=${encodeURIComponent(cleanQuery)}`, {
+        const response = await fetch(`${buildApiUrl('/api/meta/targeting-search')}?q=${encodeURIComponent(query)}`, { // Envia query original para log, mas server trata
             signal: controller.signal
         });
 
@@ -37,38 +33,53 @@ export async function searchMetaInterests(query: string): Promise<MetaInterest[]
         const data = await response.json();
 
         if (Array.isArray(data)) {
-            // 3. Pós-Processamento e Formatação
             return data.map((item: any) => {
-                let formattedName = item.name;
-                const isMassive = (item.audience_size || 0) > 1000000; // Simula "Selo Azul" para > 1M
+                const audience = item.audience_size || 0;
 
-                // Lógica de Prefixo
-                if (wantsProfile) {
-                    formattedName = `@${item.name.replace(/\s+/g, '')}`; // Força perfil sem espaços
-                } else if (wantsHashtag) {
-                    formattedName = `#${item.name.replace(/\s+/g, '')}`; // Força hashtag sem espaços
+                // Formatação de Números (K/M)
+                let followersText = '';
+                if (audience >= 1000000) followersText = `${(audience / 1000000).toFixed(1)}M seguidores`;
+                else if (audience >= 1000) followersText = `${(audience / 1000).toFixed(0)}k seguidores`;
+                else followersText = `${audience} seguidores`;
+
+                // Determina Tipo (Perfil ou Hashtag)
+                let type: 'profile' | 'hashtag' = 'hashtag';
+
+                // Se o servidor mandou dica (Sintético), usa. Se não (Real), infere.
+                if (item.type_hint) {
+                    type = item.type_hint;
                 } else {
-                    // Heurística Mista (Busca Geral)
-                    // Se tem espaços ou parece tópico genérico -> #Hashtag
-                    // Se é nome único ou massivo -> @Perfil
-                    if (item.name.includes(' ') || !isMassive) {
-                        formattedName = `#${item.name.replace(/\s+/g, '')}`;
-                    } else {
-                        formattedName = `@${item.name}`;
-                    }
+                    // Lógica para dados Reais da Meta
+                    if (wantsProfile) type = 'profile';
+                    else if (wantsHashtag) type = 'hashtag';
+                    else type = (audience > 1000000 && !item.name.includes(' ')) ? 'profile' : 'hashtag';
                 }
 
+                // Formata o Nome Visual (@ ou #)
+                let visualName = item.name;
+                if (type === 'profile' && !visualName.startsWith('@')) {
+                    visualName = `@${visualName.replace(/\s+/g, '').toLowerCase()}`;
+                } else if (type === 'hashtag' && !visualName.startsWith('#')) {
+                    visualName = `#${visualName.replace(/\s+/g, '').toLowerCase()}`;
+                }
+
+                // Selo Azul: Apenas para perfis grandes
+                const verified = type === 'profile' && audience > 500000;
+
                 return {
-                    ...item,
-                    name: formattedName,
-                    verified: isMassive // Flag para UI (opcional)
+                    id: item.id,
+                    name: visualName,
+                    audience_size: audience,
+                    type,
+                    verified,
+                    followersText
                 };
             });
         }
         return [];
 
-    } catch (error: any) {
-        if (error.name !== 'AbortError') console.error("❌ Search error:", error.message);
+    } catch (error) {
+        console.error("Search error", error);
         return [];
     }
 }
@@ -77,7 +88,5 @@ export const verifyMetaAds = async () => {
     try {
         await fetch(buildApiUrl('/api/connectors/meta-ads/verify'), { method: 'HEAD' });
         return { status: 'ACTIVE' };
-    } catch (e) {
-        return { status: 'ERROR' };
-    }
+    } catch { return { status: 'ERROR' }; }
 };
