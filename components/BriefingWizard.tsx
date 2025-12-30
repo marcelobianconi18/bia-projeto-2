@@ -323,45 +323,49 @@ export const BriefingWizard: React.FC<Props> = ({ onComplete }) => {
         );
     }
 
-    // STEP 4: REVISÃO
+    // STEP 4: REVISÃO - Liquid System
     return (
-        <div className="max-w-2xl mx-auto p-8 bg-slate-900 text-white rounded-xl shadow-2xl text-center">
-            {isScanning ? (
-                <div className="flex flex-col items-center">
-                    <Loader2 size={64} className="text-blue-500 animate-spin mb-4" />
-                    <h2 className="text-2xl font-bold mb-2">Processando Deep Targeting...</h2>
-                    <p className="text-slate-400">Cruzando {data.targeting.tribeReferences.length} Tribos contra {data.targeting.negativeHints.length} Bloqueios...</p>
-                </div>
-            ) : (
-                <>
-                    <div className="flex justify-center mb-6"><CheckCircle size={64} className="text-emerald-400" /></div>
-                    <h2 className="text-2xl font-bold mb-6">Confirme o Protocolo</h2>
+        <div className="flex flex-col items-center justify-center h-full w-full p-6 animate-fadeIn">
+            {/* O CARD PRINCIPAL AGORA É LÍQUIDO */}
+            <div className="liquid-card rounded-2xl w-full max-w-2xl text-center p-8 transition-all duration-500 relative">
 
-                    <div className="bg-slate-800 rounded-lg p-4 text-left mb-6 space-y-3 text-sm">
-                        <div className="flex justify-between border-b border-slate-700 pb-2">
-                            <span className="text-slate-400">Arquétipo:</span><span className="font-bold text-blue-400">{data.archetype}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-slate-700 pb-2">
-                            <span className="text-slate-400">Alvo:</span><span className="font-bold">{data.geography.city}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-slate-700 pb-2">
-                            <span className="text-slate-400">Verba:</span><span className="font-bold text-emerald-400">R$ {data.financials.monthlyBudget}</span>
-                        </div>
-                        <div>
-                            <span className="text-slate-400 block mb-1">Ataque (Inclusão) - {data.targeting.tribeReferences.length} perfis:</span>
-                            <div className="flex flex-wrap gap-1 mb-2 max-h-20 overflow-y-auto custom-scrollbar">{data.targeting.tribeReferences.map(t => <span key={t} className="bg-emerald-900 text-emerald-200 px-2 py-0.5 rounded text-xs">{t}</span>)}</div>
-                        </div>
-                        <div>
-                            <span className="text-slate-400 block mb-1">Defesa (Exclusão) - {data.targeting.negativeHints.length} perfis:</span>
-                            <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scrollbar">{data.targeting.negativeHints.length > 0 ? data.targeting.negativeHints.map(t => <span key={t} className="bg-red-900 text-red-200 px-2 py-0.5 rounded text-xs">{t}</span>) : <span className="text-slate-600 italic">Nenhum bloqueio</span>}</div>
-                        </div>
+                {isScanning ? (
+                    <div className="flex flex-col items-center py-10">
+                        <Loader2 size={64} className="text-accent animate-spin mb-4" />
+                        <h2 className="text-2xl font-bold mb-2 text-[rgb(var(--text-primary))]">Processando Deep Targeting...</h2>
+                        <p className="text-[rgb(var(--text-secondary))]">Cruzando {data.targeting.tribeReferences.length} Tribos contra {data.targeting.negativeHints.length} Bloqueios...</p>
                     </div>
+                ) : (
+                    <>
+                        <div className="flex justify-center mb-6"><CheckCircle size={64} className="text-emerald-400" /></div>
+                        <h2 className="text-2xl font-bold mb-6 text-[rgb(var(--text-primary))]">Confirme o Protocolo</h2>
 
-                    <button onClick={handleConfirmScanning} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-lg shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all transform hover:scale-105">
-                        EXECUTAR VARREDURA TÁTICA
-                    </button>
-                </>
-            )}
+                        <div className="bg-[rgba(var(--glass-bg),0.5)] border border-[rgba(var(--glass-border),0.1)] rounded-lg p-4 text-left mb-6 space-y-3 text-sm">
+                            <div className="flex justify-between border-b border-[rgba(var(--glass-border),0.1)] pb-2">
+                                <span className="text-[rgb(var(--text-secondary))]">Arquétipo:</span><span className="font-bold text-accent">{data.archetype}</span>
+                            </div>
+                            <div className="flex justify-between border-b border-[rgba(var(--glass-border),0.1)] pb-2">
+                                <span className="text-[rgb(var(--text-secondary))]">Alvo:</span><span className="font-bold text-[rgb(var(--text-primary))]">{data.geography.city}</span>
+                            </div>
+                            <div className="flex justify-between border-b border-[rgba(var(--glass-border),0.1)] pb-2">
+                                <span className="text-[rgb(var(--text-secondary))]">Verba:</span><span className="font-bold text-emerald-400">R$ {data.financials.monthlyBudget}</span>
+                            </div>
+                            <div>
+                                <span className="text-[rgb(var(--text-secondary))] block mb-1">Ataque (Inclusão) - {data.targeting.tribeReferences.length} perfis:</span>
+                                <div className="flex flex-wrap gap-1 mb-2 max-h-20 overflow-y-auto custom-scrollbar">{data.targeting.tribeReferences.map(t => <span key={t} className="bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-200 px-2 py-0.5 rounded text-xs">{t}</span>)}</div>
+                            </div>
+                            <div>
+                                <span className="text-[rgb(var(--text-secondary))] block mb-1">Defesa (Exclusão) - {data.targeting.negativeHints.length} perfis:</span>
+                                <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scrollbar">{data.targeting.negativeHints.length > 0 ? data.targeting.negativeHints.map(t => <span key={t} className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 px-2 py-0.5 rounded text-xs">{t}</span>) : <span className="text-[rgb(var(--text-secondary))] italic">Nenhum bloqueio</span>}</div>
+                            </div>
+                        </div>
+
+                        <button onClick={handleConfirmScanning} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-lg shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all transform hover:scale-105">
+                            EXECUTAR VARREDURA TÁTICA
+                        </button>
+                    </>
+                )}
+            </div>
         </div>
     );
 };

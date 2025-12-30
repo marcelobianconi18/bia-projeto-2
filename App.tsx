@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { Sidebar } from './components/Sidebar';
-import { MetaCommandCenter } from './components/MetaCommandCenter'; // A Estrela do Show
+import { MetaCommandCenter } from './components/MetaCommandCenter';
 import { BriefingWizard } from './components/BriefingWizard';
 import { BriefingInteligente } from './types';
+import { ThemeProvider } from './src/context/ThemeContext'; // Importe o Contexto
 
-// --- MODO SINGLE FOCUS ATIVADO ---
-// Removidos: CockpitHome, ExplorerPage (Lazy Imports deletados para performance)
-
-function App() {
+const App: React.FC = () => {
   // Estado Inicial: Se não tem briefing, mostra Wizard (se já tiver sido salvo no passado, idealmente persistiria, mas aqui reseta)
   const [hasBriefing, setHasBriefing] = useState(false);
   const [currentView, setCurrentView] = useState('COMMAND_CENTER'); // Default View forçada
@@ -20,46 +18,37 @@ function App() {
     setCurrentView('COMMAND_CENTER'); // Redirecionamento Imediato (0 cliques)
   };
 
-  // Se ainda não fez o briefing, mostre o Wizard (Tela Cheia)
-  if (!hasBriefing) {
-    return (
-      <div className="h-screen w-screen bg-slate-950 text-white flex items-center justify-center">
-        <BriefingWizard onComplete={handleBriefingComplete} />
-      </div>
-    );
-  }
-
-  // App Principal (Layout Simplificado)
+  // AQUI ESTÁ A MÁGICA DO TEMA
   return (
-    <div className="flex h-screen w-screen bg-[#f0f2f5] overflow-hidden">
-
-      {/* Navegação Minimalista */}
-      <Sidebar
-        currentView={currentView}
-        onChangeView={setCurrentView}
-        onLogout={() => setHasBriefing(false)}
-      />
-
-      {/* Área de Conteúdo */}
-      <main className="flex-1 relative overflow-hidden flex flex-col">
-        {/* ROTEAMENTO OTIMIZADO 
-            Neste modo, apenas o COMMAND_CENTER existe.
-            A estrutura switch/case foi mantida apenas para extensibilidade futura (ex: Settings),
-            mas o foco hoje é 100% Meta Ads.
-        */}
-        {currentView === 'COMMAND_CENTER' && briefingData && (
-          <MetaCommandCenter briefingData={briefingData} />
-        )}
-
-        {/* Fallback de Segurança */}
-        {currentView !== 'COMMAND_CENTER' && (
-          <div className="flex-1 flex items-center justify-center text-slate-400">
-            Funcionalidade em desenvolvimento ou restrita ao Admin.
+    <ThemeProvider>
+      <div className="flex h-screen w-full overflow-hidden bg-[rgb(var(--bg-app))] text-[rgb(var(--text-primary))] transition-colors duration-500">
+        {!hasBriefing ? (
+          <div className="h-full w-full flex items-center justify-center">
+            <BriefingWizard onComplete={handleBriefingComplete} />
           </div>
+        ) : (
+          <>
+            <Sidebar
+              currentView={currentView}
+              onChangeView={setCurrentView}
+              onLogout={() => setHasBriefing(false)}
+            />
+            <main className="flex-1 overflow-auto relative z-10 flex flex-col">
+              {/* ROTEAMENTO OTIMIZADO */}
+              {currentView === 'COMMAND_CENTER' && briefingData && (
+                <MetaCommandCenter briefingData={briefingData} />
+              )}
+              {currentView !== 'COMMAND_CENTER' && (
+                <div className="flex-1 flex items-center justify-center text-[rgb(var(--text-secondary))]">
+                  Funcionalidade em desenvolvimento ou restrita ao Admin.
+                </div>
+              )}
+            </main>
+          </>
         )}
-      </main>
-    </div>
+      </div>
+    </ThemeProvider>
   );
-}
+};
 
 export default App;
