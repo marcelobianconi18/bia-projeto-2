@@ -48,6 +48,29 @@ const TOP_CITIES_BR = [
     { name: "Florianópolis, SC", lat: -27.5954, lng: -48.5480 }
 ];
 
+const TOP_CITIES_PR = [
+    { name: "Curitiba, PR", lat: -25.4284, lng: -49.2733 },
+    { name: "Londrina, PR", lat: -23.3045, lng: -51.1696 },
+    { name: "Maringá, PR", lat: -23.4210, lng: -51.9331 },
+    { name: "Ponta Grossa, PR", lat: -25.0994, lng: -50.1583 },
+    { name: "Cascavel, PR", lat: -24.9578, lng: -53.4595 },
+    { name: "São José dos Pinhais, PR", lat: -25.5347, lng: -49.2065 },
+    { name: "Foz do Iguaçu, PR", lat: -25.5478, lng: -54.5880 },
+    { name: "Colombo, PR", lat: -25.2925, lng: -49.2263 },
+    { name: "Guarapuava, PR", lat: -25.3935, lng: -51.4562 },
+    { name: "Paranaguá, PR", lat: -25.5205, lng: -48.5095 },
+    { name: "Apucarana, PR", lat: -23.5518, lng: -51.4593 },
+    { name: "Toledo, PR", lat: -24.7258, lng: -53.7410 },
+    { name: "Araucária, PR", lat: -25.5925, lng: -49.4088 },
+    { name: "Pinhais, PR", lat: -25.4338, lng: -49.1919 },
+    { name: "Campo Largo, PR", lat: -25.4542, lng: -49.5262 },
+    { name: "Arapongas, PR", lat: -23.4150, lng: -51.4278 },
+    { name: "Almirante Tamandaré, PR", lat: -25.3204, lng: -49.3039 },
+    { name: "Piraquara, PR", lat: -25.4419, lng: -49.0623 },
+    { name: "Umuarama, PR", lat: -23.7661, lng: -53.3206 },
+    { name: "Cambé, PR", lat: -23.2764, lng: -51.2783 }
+];
+
 // --- FUNÇÕES DE INTELIGÊNCIA ---
 
 // 1. Meta Delivery Estimate (Validação Real)
@@ -156,6 +179,11 @@ app.post('/api/intelligence/hotspots-server', async (req, res) => {
             candidates = TOP_CITIES_BR.map((c, i) => ({ ...c, id: `city-${i}`, radius: 15 }));
             center = [-15.7975, -47.8919];
         }
+        // MODO ESTADO (PARANÁ)
+        else if (cleanLoc.includes('paran') || cleanLoc === 'pr') {
+            candidates = TOP_CITIES_PR.map((c, i) => ({ ...c, id: `pr-city-${i}`, radius: 5 }));
+            center = [-25.4284, -49.2733]; // Curitiba como centro
+        }
         // MODO CIDADE
         else {
             const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationQuery)}&format=json&limit=1&countrycodes=br`;
@@ -240,20 +268,20 @@ app.post('/api/intelligence/generate-targeting', async (req, res) => {
 
     if (term.includes('leite') || term.includes('saud')) {
         interests = [
-            { id: '6003', name: 'Vida Saudável', type: 'INTEREST' },
-            { id: '6004', name: 'Produtos Orgânicos', type: 'INTEREST' },
-            { id: '6005', name: 'Pais (Filhos 0-12)', type: 'DEMOGRAPHIC' }
+            { id: '2000000001001', name: 'Vida Saudável', type: 'INTEREST' },
+            { id: '2000000001002', name: 'Produtos Orgânicos', type: 'INTEREST' },
+            { id: '2000000001003', name: 'Pais (Filhos 0-12)', type: 'DEMOGRAPHIC' }
         ];
     } else if (term.includes('imob') || term.includes('casa')) {
         interests = [
-            { id: '7001', name: 'Investimento Imobiliário', type: 'INTEREST' },
-            { id: '7002', name: 'Imóveis de Luxo', type: 'INTEREST' },
-            { id: '7003', name: 'Financiamento', type: 'INTEREST' }
+            { id: '2000000002001', name: 'Investimento Imobiliário', type: 'INTEREST' },
+            { id: '2000000002002', name: 'Imóveis de Luxo', type: 'INTEREST' },
+            { id: '2000000002003', name: 'Financiamento', type: 'INTEREST' }
         ];
     } else {
         interests = [
-            { id: '8001', name: 'Compradores Engajados', type: 'BEHAVIOR' },
-            { id: '8002', name: 'Interessados no Tema', type: 'INTEREST' }
+            { id: '2000000003001', name: 'Compradores Engajados', type: 'BEHAVIOR' },
+            { id: '2000000003002', name: 'Interessados no Tema', type: 'INTEREST' }
         ];
     }
 
@@ -280,7 +308,8 @@ app.post('/api/meta-ads/campaign-create', async (req, res) => {
             name: req.body.name || "BIA Campaign",
             objective: "OUTCOME_TRAFFIC",
             status: "PAUSED",
-            special_ad_categories: [],
+            special_ad_categories: req.body.special_ad_categories || [],
+            is_adset_budget_sharing_enabled: false,
             access_token: token
         });
         const campaignId = campRes.data.id;

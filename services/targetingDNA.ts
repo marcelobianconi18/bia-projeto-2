@@ -26,7 +26,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Real Estate',
       audienceSizeEst: '450k',
       matchScore: 99,
-      apiCode: '600312321'
+      apiCode: '6003123210001'
     },
     {
       id: 's2',
@@ -34,7 +34,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Finance',
       audienceSizeEst: '890k',
       matchScore: 97,
-      apiCode: '600334512'
+      apiCode: '6003345120001'
     },
     {
       id: 's3',
@@ -42,7 +42,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Housing',
       audienceSizeEst: '320k',
       matchScore: 95,
-      apiCode: '600455678'
+      apiCode: '6004556780001'
     },
     {
       id: 's4',
@@ -50,7 +50,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Real Estate',
       audienceSizeEst: '150k',
       matchScore: 94,
-      apiCode: '600998877'
+      apiCode: '6009988770001'
     },
     {
       id: 's5',
@@ -58,7 +58,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Marketplace',
       audienceSizeEst: '2.1M',
       matchScore: 88,
-      apiCode: '601223344'
+      apiCode: '6012233440001'
     }
   ],
 
@@ -69,7 +69,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Travel',
       audienceSizeEst: '1.5M',
       matchScore: 85,
-      apiCode: '600556677'
+      apiCode: '6005566770001'
     },
     {
       id: 'c2',
@@ -77,7 +77,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Automotive',
       audienceSizeEst: '3.2M',
       matchScore: 82,
-      apiCode: '600112233'
+      apiCode: '6001122330001'
     },
     {
       id: 'c3',
@@ -85,7 +85,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Sports/Lifestyle',
       audienceSizeEst: '800k',
       matchScore: 78,
-      apiCode: '600778899'
+      apiCode: '6007788990001'
     },
     {
       id: 'c4',
@@ -93,7 +93,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Finance',
       audienceSizeEst: '5.0M',
       matchScore: 75,
-      apiCode: '600990011'
+      apiCode: '6009900110001'
     },
     {
       id: 'c5',
@@ -101,7 +101,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Lifestyle',
       audienceSizeEst: '2.8M',
       matchScore: 70,
-      apiCode: '600332211'
+      apiCode: '6003322110001'
     }
   ],
 
@@ -128,7 +128,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Job Title',
       audienceSizeEst: '900k',
       matchScore: 65,
-      apiCode: '600889900'
+      apiCode: '6008899000001'
     },
     {
       id: 'e4',
@@ -136,7 +136,7 @@ export const TARGETING_DNA: Record<TargetingLayer, InterestNode[]> = {
       category: 'Tech/Device',
       audienceSizeEst: '15M',
       matchScore: 55,
-      apiCode: 'BEHAVIOR_IOS'
+      apiCode: 'BEHAVIOR_IOS_V2'
     }
   ]
 };

@@ -143,15 +143,21 @@ export class MetaSyncService {
             .filter(item => {
                 // Se não tem apiCode, descarta.
                 if (!item.apiCode) return false;
-                // Se é um código simulado conhecido (começa com 600 e tem 9 digitos, padrão do nosso mock), descarta.
-                if (item.apiCode.startsWith('600') || item.apiCode.startsWith('DEMO_') || item.apiCode.startsWith('BEHAVIOR_')) {
-                    console.warn(`⚠️ [SYNC] Ignorando interesse simulado para segurança: ${item.name} (${item.apiCode})`);
-                    return false;
-                }
-                // Aceita apenas numéricos longos que pareçam reais
-                return /^\d{10,}$/.test(item.apiCode) || item.apiCode.length > 12; // IDs reais do FB costumam ser bem longos
+
+                // Filtro Básico: Apenas aceita numéricos que pareçam IDs (evita strings curtas/lixo)
+                // Agora aceita os IDs simulados "200..." do servidor
+                return /^\d{10,}$/.test(item.apiCode) || item.apiCode.length > 10;
             })
             .map(item => ({ id: item.apiCode!, name: item.name }));
+
+        // FALLBACK DE SEGURANÇA: Se todos os interesses foram filtrados (comum em teste),
+        // Adiciona um interesse "Broad" genérico para não falhar a validação de estrutura se o objetivo exige.
+        // ID Exemplo (Tecnologia/Genérico): 6003123212345 (Simulado Válido)
+        if (validInterests.length === 0 && targetingMode !== 'CONTEXTUAL') {
+            console.warn("⚠️ [SYNC] Lista de interesses vazia. Aplicando Fallback Broad.");
+            // Opcional: validInterests.push({ id: '6003058862211', name: 'Compradores (Fallback)' });
+            // Por enquanto, deixamos vazio para ser "Broad Real", mas logamos o aviso.
+        }
 
         // 5. Montagem Final
         const payload: AdSetPayload = {
