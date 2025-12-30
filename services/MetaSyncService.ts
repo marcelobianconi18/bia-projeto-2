@@ -136,27 +136,34 @@ export class MetaSyncService {
 
         if (validLocations.length === 0) throw new Error("Impossível sincronizar: Coordenadas GPS inválidas.");
 
-        // 4. Interesses (Targeting DNA)
-        // FILTRAGEM DE SEGURANÇA: Remove IDs simulados (Ex: "600...") para evitar erro 400 na API.
-        // Apenas interesses recuperados via API de Marketing Real (Search) deveriam passar.
-        const validInterests = (TARGETING_DNA[targetingMode] || [])
-            .filter(item => {
-                // Se não tem apiCode, descarta.
+        // 4. Interesses (Targeting DNA - Dinâmico vs Estático)
+        const modeKey = targetingMode.toLowerCase(); // 'sniper', 'contextual', 'expansive'
+
+        let sourceInterests = [];
+
+        // Tenta pegar da Inteligência Dinâmica (Backend/Gemini)
+        if (briefing.targeting && briefing.targeting[modeKey] && Array.isArray(briefing.targeting[modeKey])) {
+            sourceInterests = briefing.targeting[modeKey].map((i: any) => ({
+                apiCode: i.id, // O backend retorna 'id', mapeamos para apiCode para padronizar filtro
+                name: i.name
+            }));
+            console.log(`🧠 [SYNC] Usando Targeting Dinâmico (${sourceInterests.length} interesses) para modo ${targetingMode}`);
+        } else {
+            // Fallback para DNA Estático (apenas se a IA falhou falhou)
+            console.warn(`⚠️ [SYNC] Targeting Dinâmico não encontrado para ${targetingMode}. Usando Fallback Estático.`);
+            sourceInterests = TARGETING_DNA[targetingMode] || [];
+        }
+
+        const validInterests = sourceInterests
+            .filter((item: any) => {
                 if (!item.apiCode) return false;
-
-                // Filtro Básico: Apenas aceita numéricos que pareçam IDs (evita strings curtas/lixo)
-                // Agora aceita os IDs simulados "200..." do servidor
-                return /^\d{10,}$/.test(item.apiCode) || item.apiCode.length > 10;
+                // Aceita IDs numéricos reais ou simulados do sistema
+                return /^\d+$/.test(item.apiCode) || item.apiCode.length > 5;
             })
-            .map(item => ({ id: item.apiCode!, name: item.name }));
+            .map((item: any) => ({ id: item.apiCode!, name: item.name }));
 
-        // FALLBACK DE SEGURANÇA: Se todos os interesses foram filtrados (comum em teste),
-        // Adiciona um interesse "Broad" genérico para não falhar a validação de estrutura se o objetivo exige.
-        // ID Exemplo (Tecnologia/Genérico): 6003123212345 (Simulado Válido)
         if (validInterests.length === 0 && targetingMode !== 'CONTEXTUAL') {
-            console.warn("⚠️ [SYNC] Lista de interesses vazia. Aplicando Fallback Broad.");
-            // Opcional: validInterests.push({ id: '6003058862211', name: 'Compradores (Fallback)' });
-            // Por enquanto, deixamos vazio para ser "Broad Real", mas logamos o aviso.
+            console.warn("⚠️ [SYNC] Lista de interesses vazia.");
         }
 
         // 5. Montagem Final

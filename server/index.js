@@ -147,17 +147,12 @@ app.get('/api/meta/targeting-search', async (req, res) => {
                     id: i.id, name: i.name, audience_size: i.audience_size_lower_bound || i.audience_size || 0
                 })).sort((a, b) => b.audience_size - a.audience_size);
             }
-        } catch (e) { }
+        } catch (e) {
+            console.error("Meta Search Error:", e.message);
+        }
     }
 
-    // Fallback Sintético
-    if (results.length === 0 && query.length > 1) {
-        const base = Math.floor(Math.random() * 2000000) + 500000;
-        results = [
-            { id: `syn-1`, name: query.replace(/\s+/g, ''), audience_size: base * 2, type_hint: 'profile' },
-            { id: `syn-2`, name: query, audience_size: base * 5, type_hint: 'hashtag' }
-        ];
-    }
+    // SEM FALLBACK SINTÉTICO: Se não achou, retorna vazio. Realidade acima de tudo.
     res.json(results);
 });
 
@@ -221,7 +216,10 @@ app.post('/api/intelligence/hotspots-server', async (req, res) => {
             const promises = batch.map(async (pt) => {
                 const name = pt.name || await getLocationName(pt.lat, pt.lng);
                 let reach = await getMetaReach(pt.lat, pt.lng, pt.radius, interestId);
-                if (reach === null) reach = Math.floor(Math.random() * 50000) + 10000;
+
+                // SEM MOCK aleatório. Se falhar, é null.
+                // Mas para o heatmap funcionar minimamente, podemos aceitar 0
+                if (reach === null) reach = 0;
 
                 return {
                     id: pt.id, lat: pt.lat, lng: pt.lng,
@@ -247,7 +245,7 @@ app.post('/api/intelligence/hotspots-server', async (req, res) => {
         const maxR = uniqueHotspots[0]?.raw_reach || 1;
         const finalResults = uniqueHotspots.slice(0, 20).map(h => ({
             ...h,
-            score: Math.min(99, Math.ceil((h.raw_reach / maxR) * 100))
+            score: maxR > 0 ? Math.min(99, Math.ceil((h.raw_reach / maxR) * 100)) : 0
         }));
 
         res.json({ status: 'success', data: { hotspots: finalResults, center: center } });
@@ -257,38 +255,60 @@ app.post('/api/intelligence/hotspots-server', async (req, res) => {
     }
 });
 
-// 3. TARGETING DINÂMICO
+// 3. TARGETING DINÂMICO (COM GEN AI)
+import { GoogleGenAI } from "@google/genai";
+
 app.post('/api/intelligence/generate-targeting', async (req, res) => {
     const { niche } = req.body;
-    console.log(`🧠 [BRAIN] Gerando DNA para: "${niche}"`);
+    console.log(`🧠 [BRAIN] Gerando DNA REAL para: "${niche}"`);
 
-    // Heurística Básica
-    const term = (niche || '').toLowerCase();
-    let interests = [];
-
-    if (term.includes('leite') || term.includes('saud')) {
-        interests = [
-            { id: '2000000001001', name: 'Vida Saudável', type: 'INTEREST' },
-            { id: '2000000001002', name: 'Produtos Orgânicos', type: 'INTEREST' },
-            { id: '2000000001003', name: 'Pais (Filhos 0-12)', type: 'DEMOGRAPHIC' }
-        ];
-    } else if (term.includes('imob') || term.includes('casa')) {
-        interests = [
-            { id: '2000000002001', name: 'Investimento Imobiliário', type: 'INTEREST' },
-            { id: '2000000002002', name: 'Imóveis de Luxo', type: 'INTEREST' },
-            { id: '2000000002003', name: 'Financiamento', type: 'INTEREST' }
-        ];
-    } else {
-        interests = [
-            { id: '2000000003001', name: 'Compradores Engajados', type: 'BEHAVIOR' },
-            { id: '2000000003002', name: 'Interessados no Tema', type: 'INTEREST' }
-        ];
+    if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({
+            status: "error",
+            message: "GEMINI_API_KEY não configurada no servidor."
+        });
     }
 
-    res.json({
-        status: 'success',
-        data: { sniper: interests, expansive: interests, contextual: interests }
-    });
+    try {
+        const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        const prompt = `
+        Atue como um estrategista de tráfego pago de elite (Meta Ads).
+        Gere uma estrutura de segmentação DE ALTA PERFORMANCE para o nicho: "${niche}".
+        
+        Sua resposta deve ser ESTRITAMENTE um JSON válido com a seguinte estrutura, sem markdown ou explicações adicionais:
+        {
+            "sniper": [{ "id": "string", "name": "string", "type": "INTEREST" | "BEHAVIOR" | "DEMOGRAPHIC" }],
+            "expansive": [{ "id": "string", "name": "string", "type": "INTEREST" }],
+            "contextual": [{ "id": "string", "name": "string", "type": "INTEREST" }]
+        }
+
+        Regras:
+        - "sniper": Interesses muito específicos e de alta intenção de compra.
+        - "expansive": Interesses correlatos para ganho de escala.
+        - "contextual": Interesses baseados no estilo de vida do avatar.
+        - Use IDs fictícios para novos interesses se necessário, mas prefira nomes reais do Facebook Ads.
+        `;
+
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        let text = response.text();
+
+        // Limpeza de Markdown se houver
+        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+        const targetingData = JSON.parse(text);
+
+        res.json({
+            status: 'success',
+            data: targetingData
+        });
+
+    } catch (e) {
+        console.error("Erro na I.A.:", e);
+        res.status(500).json({ error: "Falha na geração de inteligência.", details: e.message });
+    }
 });
 
 // 4. CRIAÇÃO DE CAMPANHA (RECUPERADA!)
@@ -338,9 +358,50 @@ app.post('/api/meta-ads/campaign-create', async (req, res) => {
     }
 });
 
-// 5. Drill Down (Território)
+// 5. Drill Down (Território - INTELIGÊNCIA REAL)
 app.post('/api/intelligence/territory', async (req, res) => {
-    res.json({ status: 'REAL', data: { locationName: 'Local Analisado', averageIncome: 4500, population: 'Alta' } });
+    try {
+        const { lat, lng } = req.body;
+
+        // 1. Identifica o local real
+        const locationName = await getLocationName(lat, lng);
+        console.log(`🌍 [TERRITORY] Analisando: ${locationName}`);
+
+        if (!process.env.GEMINI_API_KEY) {
+            return res.json({ status: 'LIMITED', data: { locationName, averageIncome: 0, population: 'N/A (Sem IA)' } });
+        }
+
+        // 2. Consulta Inteligência (Gemini)
+        const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        const prompt = `
+        Analise o perfil demográfico da região: "${locationName}".
+        Estime com base em dados de conhecimento geral (IBGE/Censo históricos):
+        1. Renda Média Mensal Familiar (em Reais, numérico apenas).
+        2. Densidade Populacional (Baixa, Média, Alta).
+        
+        Retorne ESTRITAMENTE JSON:
+        { "averageIncome": number, "population": "string" }
+        `;
+
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+        const data = JSON.parse(text);
+
+        res.json({
+            status: 'REAL_AI_ESTIMATE',
+            data: {
+                locationName,
+                averageIncome: data.averageIncome || 0,
+                population: data.population || 'Desconhecida'
+            }
+        });
+
+    } catch (e) {
+        console.error("Erro Territory:", e);
+        res.status(500).json({ error: "Falha na análise territorial." });
+    }
 });
 
 app.listen(PORT, () => console.log(`🦅 BIA SERVER READY (Porta ${PORT})`));
