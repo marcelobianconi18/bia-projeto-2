@@ -16,6 +16,12 @@
   --accent-color: 37, 99, 235;
   /* Blue 600 */
   --card-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.10);
+
+  /* SOTA TOKENS */
+  --glass-blur: 40px;
+  --glass-reflect: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+  --radius-lg: 32px;
+  --spring-easing: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .dark {
